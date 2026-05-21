@@ -1,6 +1,7 @@
 """Interactive prompts and rich output helpers."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 import questionary
@@ -10,6 +11,7 @@ from rich.table import Table
 
 from .config import (
     DEFAULT_CONTAINER_NAME,
+    DEFAULT_CONTAINER_MODEL_ROOT,
     DEFAULT_HF_CACHE,
     DEFAULT_HOST_PORT,
     DEFAULT_IMAGE,
@@ -19,6 +21,8 @@ from .config import (
 from .docker_manager import ContainerInfo
 
 console = Console()
+MODEL_CONFIG_FILE = "config.json"
+MODEL_WEIGHT_SUFFIXES = (".safetensors", ".bin", ".gguf")
 
 
 # -- banners --------------------------------------------------------------
@@ -125,13 +129,89 @@ def _ask_float(message: str, default: float) -> float:
         return default
 
 
+def _looks_like_model_dir(path: Path) -> bool:
+    if not (path / MODEL_CONFIG_FILE).is_file():
+        return False
+    return any(
+        child.is_file() and child.suffix.lower() in MODEL_WEIGHT_SUFFIXES
+        for child in path.iterdir()
+    )
+
+
+def _discover_model_dirs(root: Path) -> list[Path]:
+    model_dirs: set[Path] = set()
+    for config_file in root.rglob(MODEL_CONFIG_FILE):
+        model_dir = config_file.parent
+        try:
+            if _looks_like_model_dir(model_dir):
+                model_dirs.add(model_dir)
+        except OSError:
+            continue
+    return sorted(model_dirs, key=lambda p: str(p.relative_to(root)).lower())
+
+
+def _container_model_path(model_dir: Path, mount_root: Path) -> str:
+    relative = model_dir.relative_to(mount_root)
+    container_path = Path(DEFAULT_CONTAINER_MODEL_ROOT)
+    if str(relative) != ".":
+        container_path /= relative
+    return container_path.as_posix()
+
+
+def _prompt_model() -> tuple[str, Optional[str]]:
+    method = questionary.select(
+        "Model source",
+        choices=[
+            "Enter HF id or path manually",
+            "Scan local directory for models",
+        ],
+    ).ask() or "Enter HF id or path manually"
+
+    if method == "Enter HF id or path manually":
+        model = _ask_text("Model (HF id or local path)", default="")
+        while not model:
+            console.print("[red]Model is required.[/red]")
+            model = _ask_text("Model (HF id or local path)", default="")
+        return model, None
+
+    while True:
+        root_raw = _ask_text("Local model root directory", default="")
+        root = Path(root_raw).expanduser()
+        if root.is_dir():
+            break
+        console.print(f"[red]{root_raw!r} is not a directory.[/red]")
+
+    model_dirs = _discover_model_dirs(root)
+    if not model_dirs:
+        console.print("[yellow]No model directories found. Falling back to manual input.[/yellow]")
+        model = _ask_text("Model (HF id or local path)", default="")
+        while not model:
+            console.print("[red]Model is required.[/red]")
+            model = _ask_text("Model (HF id or local path)", default="")
+        return model, None
+
+    choices = [
+        questionary.Choice(
+            title=str(model_dir.relative_to(root)),
+            value=model_dir,
+        )
+        for model_dir in model_dirs
+    ]
+    selected = questionary.select("Select model directory", choices=choices).ask()
+    if selected is None:
+        raise KeyboardInterrupt
+    mount_root = root.resolve()
+    return _container_model_path(selected.resolve(), mount_root), str(mount_root)
+
+
 def prompt_serve_config(default_model: Optional[str] = None) -> ServeConfig:
     image = _ask_text("Docker image", default=DEFAULT_IMAGE)
     container_name = _ask_text("Container name", default=DEFAULT_CONTAINER_NAME)
-    model = _ask_text("Model (HF id or local path)", default=default_model or "")
-    while not model:
-        console.print("[red]Model is required.[/red]")
-        model = _ask_text("Model (HF id or local path)", default="")
+    if default_model:
+        model = _ask_text("Model (HF id or local path)", default=default_model)
+        model_mount_dir = None
+    else:
+        model, model_mount_dir = _prompt_model()
     host_port = _ask_int("Host port", default=DEFAULT_HOST_PORT)
     gpus = _ask_text("GPUs (all / count / none)", default="all")
     hf_cache_dir = _ask_text("Host HF cache dir", default=DEFAULT_HF_CACHE)
@@ -147,6 +227,7 @@ def prompt_serve_config(default_model: Optional[str] = None) -> ServeConfig:
         gpus=gpus,
         hf_cache_dir=hf_cache_dir,
         hf_token=hf_token,
+        model_mount_dir=model_mount_dir,
         extra_args=extra_args,
     )
 

@@ -95,6 +95,8 @@ class DockerManager:
         if cfg.hf_cache_dir:
             os.makedirs(cfg.hf_cache_dir, exist_ok=True)
             volumes[cfg.hf_cache_dir] = {"bind": "/root/.cache/huggingface", "mode": "rw"}
+        if cfg.model_mount_dir:
+            volumes[cfg.model_mount_dir] = {"bind": cfg.container_model_root, "mode": "ro"}
 
         try:
             container = self.client.containers.run(

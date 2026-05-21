@@ -12,6 +12,7 @@ DEFAULT_CONTAINER_NAME = "benchcli-vllm"
 DEFAULT_HOST_PORT = 8000
 DEFAULT_CONTAINER_PORT = 8000
 DEFAULT_HF_CACHE = str(Path.home() / ".cache" / "huggingface")
+DEFAULT_CONTAINER_MODEL_ROOT = "/models"
 
 
 class ServeConfig(BaseModel):
@@ -25,6 +26,11 @@ class ServeConfig(BaseModel):
     gpus: str = Field("all", description="Value passed to `--gpus`. Use 'all', a count, or 'none'.")
     hf_cache_dir: str = DEFAULT_HF_CACHE
     hf_token: Optional[str] = None
+    model_mount_dir: Optional[str] = Field(
+        None,
+        description="Host directory mounted into the container when serving a local model.",
+    )
+    container_model_root: str = DEFAULT_CONTAINER_MODEL_ROOT
     extra_args: list[str] = Field(
         default_factory=list,
         description="Extra args appended to `vllm serve` inside the container.",

@@ -7,6 +7,8 @@ against it, with a Claude-style interactive menu.
 ## Features
 
 - Start / stop / inspect a vLLM Docker container with a chosen image and model.
+- Scan a local model root directory in the interactive flow and select any
+  discovered model directory under it.
 - Run `vllm bench serve` inside the running container with guided parameters.
 - Interactive main menu (arrow keys), or direct subcommands for scripting.
 
@@ -27,6 +29,12 @@ benchcli bench     # run `vllm bench serve` inside the container
 benchcli status    # show current container
 benchcli stop      # stop and remove the container
 ```
+
+When starting a server interactively, choose `Scan local directory for models`
+to provide a host directory that contains local model folders. BenchCli detects
+model directories that contain `config.json` and a weight file such as
+`.safetensors`, `.bin`, or `.gguf`, mounts the chosen root at `/models` inside
+the container, and passes the selected model's container path to `vllm serve`.
 
 ## Requirements
 
