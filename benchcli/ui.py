@@ -9,6 +9,7 @@ import questionary
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from .config import (
     DEFAULT_CONTAINER_NAME,
@@ -232,19 +233,31 @@ DOWNLOADABLE_DATASETS = {
 
 def banner() -> None:
     console.print(
-        Panel.fit(
-            "[bold cyan]BenchCli[/bold cyan]  ·  vLLM container & benchmark helper\n"
-            "[dim]Use arrow keys to navigate. Ctrl-C to quit.[/dim]",
-            border_style="cyan",
+        Panel(
+            Text.assemble(
+                ("BenchCli\n", "bold bright_cyan"),
+                ("vLLM container and benchmark workspace", "white"),
+                ("\nUse arrow keys to navigate. Ctrl-C to quit.", "dim"),
+            ),
+            border_style="bright_cyan",
+            padding=(1, 2),
         )
     )
 
 
 def show_status(info: Optional[ContainerInfo]) -> None:
     if info is None:
-        console.print("[yellow]No managed vLLM container is running.[/yellow]")
+        console.print(
+            Panel(
+                "[yellow]No managed vLLM container is running.[/yellow]\n"
+                "[dim]Start one from the main menu to serve a model.[/dim]",
+                title="Container Status",
+                border_style="yellow",
+                padding=(1, 2),
+            )
+        )
         return
-    table = Table(title="vLLM container", show_header=False, border_style="cyan")
+    table = Table(show_header=False, box=None, padding=(0, 1))
     table.add_row("name", info.name)
     table.add_row("id", info.id)
     table.add_row("status", info.status)
@@ -258,7 +271,80 @@ def show_status(info: Optional[ContainerInfo]) -> None:
                 mappings.append(f"{hb.get('HostIp', '0.0.0.0')}:{hb['HostPort']} → {container_port}")
         if mappings:
             table.add_row("ports", "\n".join(mappings))
-    console.print(table)
+    console.print(
+        Panel(
+            table,
+            title="Container Status",
+            border_style="bright_cyan",
+            padding=(1, 2),
+        )
+    )
+
+
+def show_starting(cfg: ServeConfig) -> None:
+    table = Table(show_header=False, box=None, padding=(0, 1))
+    table.add_row("container", cfg.container_name)
+    table.add_row("image", cfg.image)
+    table.add_row("model", cfg.model)
+    table.add_row("gpu", cfg.gpus)
+    table.add_row("host port", str(cfg.host_port))
+    table.add_row("workspace", f"{cfg.workspace_dir} -> {cfg.container_workspace_dir}")
+    if cfg.model_mount_dir:
+        table.add_row("models", f"{cfg.model_mount_dir} -> {cfg.container_model_root}")
+    if cfg.extra_args:
+        table.add_row("serve args", " ".join(shlex.quote(arg) for arg in cfg.extra_args))
+    console.print(
+        Panel(
+            table,
+            title="Starting vLLM",
+            subtitle="launching container",
+            border_style="bright_magenta",
+            padding=(1, 2),
+        )
+    )
+
+
+def show_started(cfg: ServeConfig, container_name: str, container_id: str) -> None:
+    table = Table(show_header=False, box=None, padding=(0, 1))
+    table.add_row("container", container_name)
+    table.add_row("id", container_id)
+    table.add_row("endpoint", f"http://localhost:{cfg.host_port}")
+    table.add_row("logs", f"benchcli logs --container-name {cfg.container_name}")
+    table.add_row("benchmark", "benchcli bench")
+    console.print(
+        Panel(
+            table,
+            title="vLLM Is Starting",
+            subtitle="model loading continues in the background",
+            border_style="green",
+            padding=(1, 2),
+        )
+    )
+
+
+def show_command(title: str, command: list[str]) -> None:
+    console.print(
+        Panel(
+            " ".join(shlex.quote(arg) for arg in command),
+            title=title,
+            border_style="bright_blue",
+            padding=(1, 2),
+        )
+    )
+
+
+def show_downloaded(output_path: Path) -> None:
+    table = Table(show_header=False, box=None, padding=(0, 1))
+    table.add_row("saved to", str(output_path))
+    table.add_row("container path", _container_dataset_path(str(output_path)))
+    console.print(
+        Panel(
+            table,
+            title="Dataset Downloaded",
+            border_style="green",
+            padding=(1, 2),
+        )
+    )
 
 
 # -- main menu ------------------------------------------------------------
@@ -283,19 +369,20 @@ def main_menu(
         message += f"  [model dir: {local_model_root}]"
     if selected_local_model:
         message += f" [model: {selected_local_model}]"
+    menu_choices = [
+        MENU_SERVE,
+        MENU_BENCH,
+        MENU_DOWNLOAD_DATASET,
+        MENU_MODEL_ROOT,
+        MENU_STATUS,
+        MENU_LOGS,
+        MENU_STOP,
+        questionary.Separator(),
+        MENU_QUIT,
+    ]
     choice = questionary.select(
         message,
-        choices=[
-            MENU_SERVE,
-            MENU_BENCH,
-            MENU_DOWNLOAD_DATASET,
-            MENU_MODEL_ROOT,
-            MENU_STATUS,
-            MENU_LOGS,
-            MENU_STOP,
-            questionary.Separator(),
-            MENU_QUIT,
-        ],
+        choices=_numbered_choices(menu_choices),
     ).ask()
     return choice or MENU_QUIT
 
@@ -305,6 +392,33 @@ def main_menu(
 
 class BackRequested(Exception):
     """Raised when the user asks to return to the previous prompt."""
+
+
+def _numbered_title(index: int, title: str) -> str:
+    return f"{index:02d}. {title}"
+
+
+def _numbered_choices(choices: list) -> list:
+    numbered = []
+    index = 1
+    for choice in choices:
+        if isinstance(choice, questionary.Separator):
+            numbered.append(choice)
+            continue
+        if isinstance(choice, questionary.Choice):
+            numbered.append(
+                questionary.Choice(
+                    title=_numbered_title(index, str(choice.title)),
+                    value=choice.value,
+                    disabled=choice.disabled,
+                    checked=choice.checked,
+                    shortcut_key=choice.shortcut_key,
+                )
+            )
+        else:
+            numbered.append(questionary.Choice(title=_numbered_title(index, str(choice)), value=choice))
+        index += 1
+    return numbered
 
 
 def _ask_text(message: str, default: str = "") -> str:
@@ -384,7 +498,7 @@ def _prompt_vllm_serve_extra_args(is_local_model: bool) -> list[str]:
 
     selected_flags = questionary.checkbox(
         "Extra `vllm serve` args (space to select, enter to continue)",
-        choices=choices,
+        choices=_numbered_choices(choices),
     ).ask() or []
     if BACK_CHOICE in selected_flags:
         raise BackRequested
@@ -406,7 +520,7 @@ def _prompt_vllm_serve_extra_args(is_local_model: bool) -> list[str]:
         if option.get("choices"):
             value = questionary.select(
                 f"{flag} - {option['zh']}",
-                choices=option["choices"],
+                choices=_numbered_choices(option["choices"]),
                 default=option["choices"][0],
             ).ask()
         else:
@@ -434,7 +548,7 @@ def _prompt_option_args(
         for option in options
     )
     choices.append(questionary.Choice(title=custom_title, value=custom_value))
-    selected_flags = questionary.checkbox(title, choices=choices).ask() or []
+    selected_flags = questionary.checkbox(title, choices=_numbered_choices(choices)).ask() or []
     if BACK_CHOICE in selected_flags:
         raise BackRequested
 
@@ -454,7 +568,7 @@ def _prompt_option_args(
         if option.get("choices"):
             value = questionary.select(
                 f"{flag} - {option['zh']}",
-                choices=option["choices"],
+                choices=_numbered_choices(option["choices"]),
                 default=option["choices"][0],
             ).ask()
             if value is None:
@@ -548,7 +662,7 @@ def _select_model_from_root(root: Path) -> tuple[str, str]:
         )
         for model_dir in model_dirs
     ])
-    selected = questionary.select("Select local model", choices=choices).ask()
+    selected = questionary.select("Select local model", choices=_numbered_choices(choices)).ask()
     if selected == BACK_CHOICE:
         raise BackRequested
     if selected is None:
@@ -607,7 +721,7 @@ def _prompt_model(
 
     method = questionary.select(
         "Model",
-        choices=choices,
+        choices=_numbered_choices(choices),
     ).ask() or manual_choice
 
     if method == BACK_CHOICE:
@@ -729,7 +843,7 @@ def prompt_dataset_download() -> tuple[str, Path]:
         for name, data in DOWNLOADABLE_DATASETS.items()
     ]
     choices.append(questionary.Choice(title="Custom URL", value="__custom__"))
-    selected = questionary.select("Dataset to download", choices=choices).ask()
+    selected = questionary.select("Dataset to download", choices=_numbered_choices(choices)).ask()
     if selected is None:
         raise KeyboardInterrupt
     if selected == "__custom__":
@@ -762,7 +876,7 @@ def _prompt_dataset_path(default: Optional[str] = None) -> Optional[str]:
         )
     selected = questionary.select(
         "Dataset path",
-        choices=choices,
+        choices=_numbered_choices(choices),
         default=default or "",
     ).ask()
     if selected is None:
@@ -774,7 +888,7 @@ def _prompt_dataset_path(default: Optional[str] = None) -> Optional[str]:
 
 
 def show_bench_config(cfg: BenchConfig) -> None:
-    table = Table(title="vLLM bench serve config", show_header=False, border_style="cyan")
+    table = Table(show_header=False, box=None, padding=(0, 1))
     table.add_row("bench_command", " ".join(shlex.quote(arg) for arg in cfg.bench_command))
     table.add_row("model", cfg.model)
     table.add_row("backend", cfg.backend)
@@ -794,7 +908,15 @@ def show_bench_config(cfg: BenchConfig) -> None:
     if cfg.extra_args:
         table.add_row("extra_args", " ".join(shlex.quote(arg) for arg in cfg.extra_args))
     table.add_row("command", " ".join(shlex.quote(arg) for arg in cfg.vllm_bench_command()))
-    console.print(table)
+    console.print(
+        Panel(
+            table,
+            title="Benchmark Preview",
+            subtitle="review before execution",
+            border_style="bright_cyan",
+            padding=(1, 2),
+        )
+    )
 
 
 def _prompt_bench_command(default_command: list[str]) -> list[str]:
@@ -811,7 +933,7 @@ def _prompt_bench_command(default_command: list[str]) -> list[str]:
     ]
     selected = questionary.select(
         "Benchmark command",
-        choices=choices,
+        choices=_numbered_choices(choices),
         default=default_key,
     ).ask()
     if selected is None:
@@ -852,7 +974,7 @@ def prompt_bench_config(
             elif step == 2:
                 backend = questionary.select(
                     "Backend",
-                    choices=["openai", "openai-chat", "vllm", "tgi", "deepspeed-mii"],
+                    choices=_numbered_choices(["openai", "openai-chat", "vllm", "tgi", "deepspeed-mii"]),
                     default=backend,
                 ).ask() or backend
             elif step == 3:
@@ -862,7 +984,11 @@ def prompt_bench_config(
             elif step == 5:
                 selected = questionary.select(
                     "Dataset name",
-                    choices=[questionary.Choice(title="← Back", value=BACK_CHOICE), questionary.Separator(), *BENCH_DATASET_NAMES],
+                    choices=_numbered_choices([
+                        questionary.Choice(title="← Back", value=BACK_CHOICE),
+                        questionary.Separator(),
+                        *BENCH_DATASET_NAMES,
+                    ]),
                     default=dataset_name,
                 ).ask()
                 if selected == BACK_CHOICE:

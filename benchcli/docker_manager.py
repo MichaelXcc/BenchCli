@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-import shlex
 import subprocess
 from dataclasses import dataclass
 from typing import Iterable, Optional
@@ -212,6 +211,4 @@ class DockerManager:
         if workdir:
             argv += ["-w", workdir]
         argv += [name, *command]
-        printable = " ".join(shlex.quote(p) for p in argv)
-        print(f"$ {printable}")
         return subprocess.call(argv)

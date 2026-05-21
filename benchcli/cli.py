@@ -4,6 +4,7 @@ from __future__ import annotations
 import urllib.request
 from typing import Optional
 
+from rich.panel import Panel
 import typer
 
 from . import ui
@@ -81,19 +82,13 @@ def serve(
             host_port=host_port,
             gpus=gpus,
         )
-    ui.console.print(f"[cyan]Starting vLLM container [bold]{cfg.container_name}[/bold]…[/cyan]")
+    ui.show_starting(cfg)
     try:
         container = dm.start_vllm(cfg)
     except DockerError as exc:
         ui.console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
-    ui.console.print(
-        f"[green]Started[/green] {container.name} "
-        f"on http://localhost:{cfg.host_port}  (id={container.short_id})"
-    )
-    ui.console.print(
-        "[dim]Note: the model still needs to load. Use `benchcli logs` to follow startup.[/dim]"
-    )
+    ui.show_started(cfg, container.name, container.short_id)
 
 
 @app.command()
@@ -124,9 +119,11 @@ def bench(
             raise typer.Exit(code=2)
         cfg = BenchConfig(model=default_model)
 
+    bench_command = cfg.vllm_bench_command()
+    ui.show_command("Executing Benchmark", bench_command)
     rc = dm.exec_interactive(
         container_name,
-        cfg.vllm_bench_command(),
+        bench_command,
         workdir=DEFAULT_WORKSPACE_MOUNT,
     )
     if rc != 0:
@@ -138,13 +135,13 @@ def bench(
 def download_dataset() -> None:
     """Download a benchmark dataset to the host workspace."""
     url, output_path = ui.prompt_dataset_download()
-    ui.console.print(f"[cyan]Downloading[/cyan] {url}")
+    ui.show_command("Downloading Dataset", ["curl", "-L", url, "-o", str(output_path)])
     try:
         urllib.request.urlretrieve(url, output_path)
     except Exception as exc:  # noqa: BLE001
         ui.console.print(f"[red]Failed to download dataset: {exc}[/red]")
         raise typer.Exit(code=1) from exc
-    ui.console.print(f"[green]Downloaded[/green] {output_path}")
+    ui.show_downloaded(output_path)
 
 
 @app.command()
@@ -218,11 +215,9 @@ def _interactive_loop() -> None:
                 if cfg.model_mount_dir:
                     local_model_root = cfg.model_mount_dir
                     selected_local_model = cfg.model
-                ui.console.print(f"[cyan]Starting {cfg.container_name}…[/cyan]")
+                ui.show_starting(cfg)
                 container = dm.start_vllm(cfg)
-                ui.console.print(
-                    f"[green]Started[/green] {container.name} on http://localhost:{cfg.host_port}"
-                )
+                ui.show_started(cfg, container.name, container.short_id)
             elif choice == ui.MENU_BENCH:
                 info = dm.info(DEFAULT_CONTAINER_NAME)
                 if info is None or info.status != "running":
@@ -239,26 +234,33 @@ def _interactive_loop() -> None:
                     default_model=default_model,
                     default_bench_command=default_bench_command,
                 )
+                bench_command = cfg.vllm_bench_command()
+                ui.show_command("Executing Benchmark", bench_command)
                 dm.exec_interactive(
                     DEFAULT_CONTAINER_NAME,
-                    cfg.vllm_bench_command(),
+                    bench_command,
                     workdir=DEFAULT_WORKSPACE_MOUNT,
                 )
             elif choice == ui.MENU_DOWNLOAD_DATASET:
                 url, output_path = ui.prompt_dataset_download()
-                ui.console.print(f"[cyan]Downloading[/cyan] {url}")
+                ui.show_command("Downloading Dataset", ["curl", "-L", url, "-o", str(output_path)])
                 try:
                     urllib.request.urlretrieve(url, output_path)
                 except Exception as exc:  # noqa: BLE001
                     ui.console.print(f"[red]Failed to download dataset: {exc}[/red]")
                     continue
-                ui.console.print(f"[green]Downloaded[/green] {output_path}")
+                ui.show_downloaded(output_path)
             elif choice == ui.MENU_MODEL_ROOT:
                 selected_local_model, local_model_root = ui.prompt_local_model(
                     default_root=local_model_root
                 )
                 ui.console.print(
-                    f"[green]Selected local model {selected_local_model} from {local_model_root}.[/green]"
+                    Panel(
+                        f"[bold green]{selected_local_model}[/bold green]\n[dim]{local_model_root}[/dim]",
+                        title="Local Model Selected",
+                        border_style="green",
+                        padding=(1, 2),
+                    )
                 )
             elif choice == ui.MENU_STATUS:
                 ui.show_status(dm.info(DEFAULT_CONTAINER_NAME))
