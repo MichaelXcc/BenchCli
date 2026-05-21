@@ -58,7 +58,10 @@ def serve(
     image: str = typer.Option(DEFAULT_IMAGE, help="Docker image."),
     container_name: str = typer.Option(DEFAULT_CONTAINER_NAME, help="Container name."),
     host_port: int = typer.Option(DEFAULT_HOST_PORT, help="Host port to expose."),
-    gpus: str = typer.Option("all", help="GPU spec: 'all', count, or 'none'."),
+    gpus: str = typer.Option(
+        "all",
+        help="GPU spec: 'all', 'none', a count like '2', or GPU ids like '0,1'.",
+    ),
     interactive: bool = typer.Option(True, help="Prompt for missing fields."),
 ) -> None:
     """Start a vLLM inference container."""
@@ -230,6 +233,8 @@ def _interactive_loop() -> None:
                         ui.console.print("[yellow]Container not found.[/yellow]")
         except DockerError as exc:
             ui.console.print(f"[red]{exc}[/red]")
+        except ui.BackRequested:
+            ui.console.print("\n[dim]Cancelled.[/dim]")
         except KeyboardInterrupt:
             ui.console.print("\n[dim]Cancelled.[/dim]")
 

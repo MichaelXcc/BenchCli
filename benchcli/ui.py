@@ -25,6 +25,8 @@ console = Console()
 MODEL_CONFIG_FILE = "config.json"
 MODEL_WEIGHT_SUFFIXES = (".safetensors", ".bin", ".gguf")
 CUSTOM_SERVE_ARGS = "__custom_serve_args__"
+BACK_TOKEN = ":back"
+BACK_CHOICE = "__back__"
 
 VLLM_MODEL_CONFIG_OPTIONS = [
     {
@@ -225,25 +227,38 @@ def main_menu(
 # -- prompts --------------------------------------------------------------
 
 
+class BackRequested(Exception):
+    """Raised when the user asks to return to the previous prompt."""
+
+
 def _ask_text(message: str, default: str = "") -> str:
-    return (questionary.text(message, default=default).ask() or default).strip()
+    suffix = f" (type {BACK_TOKEN} to go back)"
+    raw = questionary.text(message + suffix, default=default).ask()
+    value = (raw or default).strip()
+    if value == BACK_TOKEN:
+        raise BackRequested
+    return value
 
 
 def _ask_int(message: str, default: int) -> int:
     raw = questionary.text(
-        message,
+        message + f" (type {BACK_TOKEN} to go back)",
         default=str(default),
-        validate=lambda v: v.isdigit() or "Please enter a positive integer.",
+        validate=lambda v: v == BACK_TOKEN or v.isdigit() or "Please enter a positive integer.",
     ).ask()
+    if raw == BACK_TOKEN:
+        raise BackRequested
     return int(raw) if raw else default
 
 
 def _ask_optional_int(message: str, default: Optional[int] = None) -> Optional[int]:
     raw = questionary.text(
-        message + " (blank to skip)",
+        message + f" (blank to skip, type {BACK_TOKEN} to go back)",
         default="" if default is None else str(default),
-        validate=lambda v: v == "" or v.isdigit() or "Enter an integer or leave blank.",
+        validate=lambda v: v in {"", BACK_TOKEN} or v.isdigit() or "Enter an integer or leave blank.",
     ).ask()
+    if raw == BACK_TOKEN:
+        raise BackRequested
     if not raw:
         return None
     return int(raw)
@@ -251,12 +266,14 @@ def _ask_optional_int(message: str, default: Optional[int] = None) -> Optional[i
 
 def _ask_float(message: str, default: float) -> float:
     raw = questionary.text(
-        message,
+        message + f" (type {BACK_TOKEN} to go back)",
         default="inf" if default == float("inf") else str(default),
     ).ask()
     if raw is None or raw.strip() == "":
         return default
     raw = raw.strip()
+    if raw == BACK_TOKEN:
+        raise BackRequested
     if raw.lower() in {"inf", "infinity"}:
         return float("inf")
     try:
@@ -272,12 +289,16 @@ def _prompt_vllm_serve_extra_args(is_local_model: bool) -> list[str]:
         if not (is_local_model and option.get("remote_only"))
     ]
     choices = [
+        questionary.Choice(title="← Back", value=BACK_CHOICE),
+        questionary.Separator(),
+    ]
+    choices.extend([
         questionary.Choice(
             title=f"{option['flag']} - {option['zh']}",
             value=option["flag"],
         )
         for option in available_options
-    ]
+    ])
     choices.append(
         questionary.Choice(
             title="自定义原始参数 - 手动输入其它 vllm serve 参数",
@@ -289,6 +310,8 @@ def _prompt_vllm_serve_extra_args(is_local_model: bool) -> list[str]:
         "Extra `vllm serve` args (space to select, enter to continue)",
         choices=choices,
     ).ask() or []
+    if BACK_CHOICE in selected_flags:
+        raise BackRequested
 
     option_by_flag = {option["flag"]: option for option in available_options}
     args: list[str] = []
@@ -375,13 +398,19 @@ def _select_model_from_root(root: Path) -> tuple[str, str]:
 
     console.print(f"[cyan]Found {len(model_dirs)} local model(s) under {root}.[/cyan]")
     choices = [
+        questionary.Choice(title="← Back", value=BACK_CHOICE),
+        questionary.Separator(),
+    ]
+    choices.extend([
         questionary.Choice(
             title=str(model_dir.relative_to(root)),
             value=model_dir,
         )
         for model_dir in model_dirs
-    ]
+    ])
     selected = questionary.select("Select local model", choices=choices).ask()
+    if selected == BACK_CHOICE:
+        raise BackRequested
     if selected is None:
         raise KeyboardInterrupt
     mount_root = root.resolve()
@@ -389,8 +418,19 @@ def _select_model_from_root(root: Path) -> tuple[str, str]:
 
 
 def prompt_local_model(default_root: Optional[str] = None) -> tuple[str, str]:
-    root = Path(prompt_local_model_root(default=default_root))
-    return _select_model_from_root(root)
+    step = 0
+    root = Path(default_root).expanduser() if default_root else None
+    while True:
+        try:
+            if step == 0:
+                root = Path(prompt_local_model_root(default=str(root) if root else None))
+            elif step == 1 and root is not None:
+                return _select_model_from_root(root)
+            step += 1
+        except BackRequested:
+            if step == 0:
+                raise KeyboardInterrupt from None
+            step -= 1
 
 
 def _prompt_manual_model(default_model: Optional[str] = None) -> str:
@@ -411,6 +451,8 @@ def _prompt_model(
     change_choice = "Change local model directory and select model"
     manual_choice = "Enter HF id or path manually"
     choices = []
+    choices.append(questionary.Choice(title="← Back", value=BACK_CHOICE))
+    choices.append(questionary.Separator())
     if selected_local_model and local_model_root:
         label = _local_model_label(selected_local_model, local_model_root)
         choices.append(questionary.Choice(f"{use_selected_choice} ({label})", use_selected_choice))
@@ -427,6 +469,9 @@ def _prompt_model(
         "Model",
         choices=choices,
     ).ask() or manual_choice
+
+    if method == BACK_CHOICE:
+        raise BackRequested
 
     if method == use_selected_choice and selected_local_model and local_model_root:
         return selected_local_model, local_model_root
@@ -448,22 +493,51 @@ def prompt_serve_config(
     local_model_root: Optional[str] = None,
     selected_local_model: Optional[str] = None,
 ) -> ServeConfig:
-    image = _ask_text("Docker image", default=DEFAULT_IMAGE)
-    container_name = _ask_text("Container name", default=DEFAULT_CONTAINER_NAME)
-    model, model_mount_dir = _prompt_model(
-        default_model=default_model,
-        local_model_root=local_model_root,
-        selected_local_model=selected_local_model,
-    )
-    host_port = _ask_int("Host port", default=DEFAULT_HOST_PORT)
-    gpus = _ask_text("GPUs (all / count / none)", default="all")
-    if model_mount_dir:
-        hf_cache_dir = ""
-        hf_token = None
-    else:
-        hf_cache_dir = _ask_text("Host HF cache dir", default=DEFAULT_HF_CACHE)
-        hf_token = _ask_text("HF token (blank if not needed)", default="") or None
-    extra_args = _prompt_vllm_serve_extra_args(is_local_model=bool(model_mount_dir))
+    step = 0
+    image = DEFAULT_IMAGE
+    container_name = DEFAULT_CONTAINER_NAME
+    model = default_model or ""
+    model_mount_dir: Optional[str] = None
+    host_port = DEFAULT_HOST_PORT
+    gpus = "all"
+    hf_cache_dir = DEFAULT_HF_CACHE
+    hf_token: Optional[str] = None
+    extra_args: list[str] = []
+
+    while step < 7:
+        try:
+            if step == 0:
+                image = _ask_text("Docker image", default=image)
+            elif step == 1:
+                container_name = _ask_text("Container name", default=container_name)
+            elif step == 2:
+                model, model_mount_dir = _prompt_model(
+                    default_model=model,
+                    local_model_root=local_model_root,
+                    selected_local_model=selected_local_model,
+                )
+            elif step == 3:
+                host_port = _ask_int("Host port", default=host_port)
+            elif step == 4:
+                gpus = _ask_text("GPUs (all / none / count / ids like 0,1)", default=gpus)
+            elif step == 5:
+                if model_mount_dir:
+                    hf_cache_dir = ""
+                    hf_token = None
+                else:
+                    hf_cache_dir = _ask_text("Host HF cache dir", default=hf_cache_dir)
+                    hf_token = _ask_text("HF token (blank if not needed)", default=hf_token or "") or None
+            elif step == 6:
+                extra_args = _prompt_vllm_serve_extra_args(is_local_model=bool(model_mount_dir))
+            step += 1
+        except BackRequested:
+            if step == 0:
+                raise KeyboardInterrupt from None
+            if step == 6 and model_mount_dir:
+                step = 4
+            else:
+                step = max(0, step - 1)
+
     return ServeConfig(
         image=image,
         container_name=container_name,

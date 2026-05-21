@@ -62,6 +62,22 @@ class DockerManager:
 
     # -- lifecycle ------------------------------------------------------------
 
+    @staticmethod
+    def _gpu_device_request(gpus: str) -> docker.types.DeviceRequest:
+        spec = gpus.strip().lower()
+        if spec == "all":
+            return docker.types.DeviceRequest(count=-1, capabilities=[["gpu"]])
+        if spec.isdigit():
+            return docker.types.DeviceRequest(count=int(spec), capabilities=[["gpu"]])
+        if spec.startswith("device="):
+            spec = spec.removeprefix("device=")
+        device_ids = [device.strip() for device in spec.split(",") if device.strip()]
+        if device_ids and all(device.isdigit() for device in device_ids):
+            return docker.types.DeviceRequest(device_ids=device_ids, capabilities=[["gpu"]])
+        raise DockerError(
+            "Invalid GPU spec. Use 'all', 'none', a count like '2', or GPU ids like '0,1'."
+        )
+
     def ensure_image(self, image: str, pull_if_missing: bool = True) -> None:
         try:
             self.client.images.get(image)
@@ -86,10 +102,7 @@ class DockerManager:
 
         device_requests = []
         if cfg.gpus and cfg.gpus.lower() != "none":
-            count = -1 if cfg.gpus == "all" else int(cfg.gpus)
-            device_requests.append(
-                docker.types.DeviceRequest(count=count, capabilities=[["gpu"]])
-            )
+            device_requests.append(self._gpu_device_request(cfg.gpus))
 
         volumes = {}
         if cfg.hf_cache_dir:

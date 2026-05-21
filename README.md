@@ -47,6 +47,10 @@ cache and HF token prompts are skipped.
 BenchCli starts the vLLM image with `--model <model>` and includes options such
 as `--tensor-parallel-size` and `--gpu-memory-utilization` in the selectable
 extra arguments.
+During interactive prompts, enter `:back` in text or number fields to return to
+the previous step. Selection prompts include a `← Back` option.
+For the GPU prompt, enter `all` for every GPU, `none` for CPU/no GPU, a count
+such as `2`, or explicit GPU ids such as `0` or `0,1`.
 
 ## Requirements
 

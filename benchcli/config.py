@@ -23,7 +23,10 @@ class ServeConfig(BaseModel):
     model: str = Field(..., description="HF model id or local path mounted into the container.")
     host_port: int = DEFAULT_HOST_PORT
     container_port: int = DEFAULT_CONTAINER_PORT
-    gpus: str = Field("all", description="Value passed to `--gpus`. Use 'all', a count, or 'none'.")
+    gpus: str = Field(
+        "all",
+        description="GPU spec. Use 'all', 'none', a count like '2', or GPU ids like '0,1'.",
+    )
     hf_cache_dir: str = DEFAULT_HF_CACHE
     hf_token: Optional[str] = None
     model_mount_dir: Optional[str] = Field(
