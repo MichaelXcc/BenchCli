@@ -1,5 +1,9 @@
 # OpenBench
 
+<p align="center">
+  <img src="assets/logo.png" alt="OpenBench logo" width="720">
+</p>
+
 An interactive CLI for working with vLLM containers. Wraps the common workflows
 of starting a vLLM inference server in Docker and running `vllm bench serve`
 against it, with a Claude-style interactive menu.
