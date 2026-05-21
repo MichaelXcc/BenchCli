@@ -521,17 +521,13 @@ def main_menu(
     if selected_local_model:
         message += f" [model: {selected_local_model}]"
     hint = "Commands use slash style: /serve, /bench, /download, /model, /status, /logs, /stop, /quit. Type /help."
-    raw = questionary.text(f"{message}\nopenbench /", default="").ask()
+    raw = questionary.text(f"{message}\nopenbench >", default="").ask()
     if raw is None:
         return MENU_QUIT
     stripped = raw.strip()
     if stripped in {"", "?", "help", "/help"}:
         _show_command_hint()
-        choice = questionary.select(
-            "Choose a command",
-            choices=_numbered_choices(_main_menu_choices()),
-        ).ask()
-        return choice or MENU_QUIT
+        return main_menu(local_model_root=local_model_root, selected_local_model=selected_local_model)
 
     command_text = stripped if stripped.startswith("/") else f"/{stripped}"
     if not stripped.startswith("/"):
@@ -545,11 +541,7 @@ def main_menu(
 
     console.print(f"[yellow]Unknown command:[/yellow] {raw.strip()}")
     console.print(f"[dim]{hint}[/dim]")
-    choice = questionary.select(
-        "Choose a command",
-        choices=_numbered_choices(_main_menu_choices()),
-    ).ask()
-    return choice or MENU_QUIT
+    return main_menu(local_model_root=local_model_root, selected_local_model=selected_local_model)
 
 
 # -- prompts --------------------------------------------------------------
