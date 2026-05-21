@@ -1,4 +1,4 @@
-"""BenchCli command-line entry point."""
+"""OpenBench command-line entry point."""
 from __future__ import annotations
 
 import urllib.request
@@ -102,7 +102,7 @@ def bench(
     info = dm.info(container_name)
     if info is None or info.status != "running":
         ui.console.print(
-            f"[red]Container {container_name!r} is not running. Start it with `benchcli serve` first.[/red]"
+            f"[red]Container {container_name!r} is not running. Start it with `openbench serve` first.[/red]"
         )
         raise typer.Exit(code=1)
 
@@ -198,7 +198,7 @@ def _interactive_loop() -> None:
     dm = _manager()
     local_model_root: Optional[str] = None
     selected_local_model: Optional[str] = None
-    ui.banner()
+    ui.banner(dm.host_runtime_info())
     while True:
         choice = ui.main_menu(
             local_model_root=local_model_root,
@@ -294,7 +294,7 @@ def _root(ctx: typer.Context) -> None:
             ui.console.print("\n[dim]Bye.[/dim]")
 
 
-def main() -> None:  # pragma: no cover — convenience for `python -m benchcli`
+def main() -> None:  # pragma: no cover — convenience for module execution
     app()
 
 

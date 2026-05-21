@@ -26,8 +26,18 @@ class ContainerInfo:
     ports: dict
 
 
+@dataclass
+class HostRuntimeInfo:
+    docker_server_version: str
+    docker_default_runtime: str
+    docker_runtimes: list[str]
+    nvidia_runtime: bool
+    gpus: list[str]
+    gpu_error: Optional[str] = None
+
+
 class DockerManager:
-    """High-level operations on the vLLM container managed by BenchCli."""
+    """High-level operations on the vLLM container managed by OpenBench."""
 
     def __init__(self) -> None:
         try:
@@ -57,6 +67,54 @@ class DockerManager:
             status=c.status,
             image=(c.image.tags[0] if c.image and c.image.tags else c.image.id),
             ports=c.attrs.get("NetworkSettings", {}).get("Ports", {}) or {},
+        )
+
+    def host_runtime_info(self) -> HostRuntimeInfo:
+        try:
+            version = self.client.version().get("Version", "unknown")
+        except Exception:  # noqa: BLE001
+            version = "unknown"
+        try:
+            docker_info = self.client.info()
+        except Exception:  # noqa: BLE001
+            docker_info = {}
+        runtimes = sorted((docker_info.get("Runtimes") or {}).keys())
+        default_runtime = docker_info.get("DefaultRuntime") or "unknown"
+
+        gpus: list[str] = []
+        gpu_error = None
+        try:
+            proc = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=index,name,memory.total,driver_version",
+                    "--format=csv,noheader,nounits",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if proc.returncode == 0:
+                for line in proc.stdout.splitlines():
+                    parts = [part.strip() for part in line.split(",")]
+                    if len(parts) >= 4:
+                        index, name, memory, driver = parts[:4]
+                        gpus.append(f"GPU {index}: {name} ({memory} MiB, driver {driver})")
+            else:
+                gpu_error = (proc.stderr or proc.stdout or "nvidia-smi returned non-zero").strip()
+        except FileNotFoundError:
+            gpu_error = "nvidia-smi not found"
+        except Exception as exc:  # noqa: BLE001
+            gpu_error = str(exc)
+
+        return HostRuntimeInfo(
+            docker_server_version=version,
+            docker_default_runtime=default_runtime,
+            docker_runtimes=runtimes,
+            nvidia_runtime="nvidia" in runtimes,
+            gpus=gpus,
+            gpu_error=gpu_error,
         )
 
     # -- lifecycle ------------------------------------------------------------

@@ -3,13 +3,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "benchcli"
+name = "openbench"
 version = "0.1.0"
 description = "Interactive CLI for running vLLM inference containers and `vllm bench serve` benchmarks."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "BenchCli" }]
+authors = [{ name = "OpenBench" }]
 dependencies = [
     "typer>=0.12.0",
     "rich>=13.7.0",
@@ -19,6 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
+openbench = "benchcli.cli:app"
 benchcli = "benchcli.cli:app"
 
 [tool.hatch.build.targets.wheel]

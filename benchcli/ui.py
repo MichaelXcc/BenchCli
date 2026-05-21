@@ -22,7 +22,7 @@ from .config import (
     BenchConfig,
     ServeConfig,
 )
-from .docker_manager import ContainerInfo
+from .docker_manager import ContainerInfo, HostRuntimeInfo
 
 console = Console()
 MODEL_CONFIG_FILE = "config.json"
@@ -231,14 +231,24 @@ DOWNLOADABLE_DATASETS = {
 # -- banners --------------------------------------------------------------
 
 
-def banner() -> None:
+def banner(runtime: Optional[HostRuntimeInfo] = None) -> None:
+    table = Table(show_header=False, box=None, padding=(0, 1))
+    table.add_row("workspace", DEFAULT_WORKSPACE_MOUNT)
+    if runtime:
+        table.add_row("docker", runtime.docker_server_version)
+        table.add_row("runtime", runtime.docker_default_runtime)
+        table.add_row("gpu runtime", "available" if runtime.nvidia_runtime else "not detected")
+        table.add_row("runtimes", ", ".join(runtime.docker_runtimes) or "unknown")
+        if runtime.gpus:
+            table.add_row("gpu", "\n".join(runtime.gpus))
+        else:
+            table.add_row("gpu", runtime.gpu_error or "not detected")
+
     console.print(
         Panel(
-            Text.assemble(
-                ("BenchCli\n", "bold bright_cyan"),
-                ("vLLM container and benchmark workspace", "white"),
-                ("\nUse arrow keys to navigate. Ctrl-C to quit.", "dim"),
-            ),
+            table,
+            title=Text.assemble(("OpenBench", "bold bright_cyan"), ("  Environment", "white")),
+            subtitle="Use arrow keys to navigate. Ctrl-C to quit.",
             border_style="bright_cyan",
             padding=(1, 2),
         )
@@ -309,8 +319,8 @@ def show_started(cfg: ServeConfig, container_name: str, container_id: str) -> No
     table.add_row("container", container_name)
     table.add_row("id", container_id)
     table.add_row("endpoint", f"http://localhost:{cfg.host_port}")
-    table.add_row("logs", f"benchcli logs --container-name {cfg.container_name}")
-    table.add_row("benchmark", "benchcli bench")
+    table.add_row("logs", f"openbench logs --container-name {cfg.container_name}")
+    table.add_row("benchmark", "openbench bench")
     console.print(
         Panel(
             table,

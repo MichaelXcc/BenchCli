@@ -1,4 +1,4 @@
-"""Configuration models and defaults for BenchCli."""
+"""Configuration models and defaults for OpenBench."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,12 +8,12 @@ from pydantic import BaseModel, Field
 
 
 DEFAULT_IMAGE = "vllm/vllm-openai:latest"
-DEFAULT_CONTAINER_NAME = "benchcli-vllm"
+DEFAULT_CONTAINER_NAME = "openbench-vllm"
 DEFAULT_HOST_PORT = 8000
 DEFAULT_CONTAINER_PORT = 8000
 DEFAULT_HF_CACHE = str(Path.home() / ".cache" / "huggingface")
 DEFAULT_CONTAINER_MODEL_ROOT = "/models"
-DEFAULT_WORKSPACE_MOUNT = "/workspace/benchcli"
+DEFAULT_WORKSPACE_MOUNT = "/workspace/openbench"
 DEFAULT_DATASET_DIR = "datasets"
 
 
