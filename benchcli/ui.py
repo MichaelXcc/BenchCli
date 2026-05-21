@@ -67,6 +67,11 @@ VLLM_MODEL_CONFIG_OPTIONS = [
         "flag": "--max-model-len",
         "zh": "模型上下文长度，支持 1k/1K/25.6k/auto 等写法。",
     },
+    {"flag": "--tensor-parallel-size", "zh": "张量并行使用的 GPU 数量；例如 1、2、4、8。"},
+    {
+        "flag": "--gpu-memory-utilization",
+        "zh": "每张 GPU 可用于模型执行的显存比例；例如 0.9 或 0.95。",
+    },
     {"flag": "--quantization", "zh": "权重量化方式；不填时按模型配置自动判断。"},
     {"flag": "--quantization-config", "zh": "量化配置 JSON 或键值参数。"},
     {

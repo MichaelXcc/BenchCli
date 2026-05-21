@@ -44,6 +44,9 @@ The `Extra vllm serve args` step shows selectable ModelConfig options from the
 vLLM serve CLI docs with Chinese descriptions. Select one or more options, then
 BenchCli will ask for the required value for each option. For local models, HF
 cache and HF token prompts are skipped.
+BenchCli starts the vLLM image with `--model <model>` and includes options such
+as `--tensor-parallel-size` and `--gpu-memory-utilization` in the selectable
+extra arguments.
 
 ## Requirements
 

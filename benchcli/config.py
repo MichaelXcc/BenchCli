@@ -37,7 +37,7 @@ class ServeConfig(BaseModel):
     )
 
     def vllm_command(self) -> list[str]:
-        cmd = ["vllm", "serve", self.model, "--host", "0.0.0.0", "--port", str(self.container_port)]
+        cmd = ["--model", self.model, "--host", "0.0.0.0", "--port", str(self.container_port)]
         cmd.extend(self.extra_args)
         return cmd
 

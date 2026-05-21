@@ -39,6 +39,10 @@ def _resolve_running_model(dm: DockerManager, container_name: str) -> Optional[s
     if c is None:
         return None
     cmd = c.attrs.get("Config", {}).get("Cmd") or []
+    if "--model" in cmd:
+        model_index = cmd.index("--model") + 1
+        if model_index < len(cmd):
+            return cmd[model_index]
     # Expected: ["vllm", "serve", "<model>", ...]
     if len(cmd) >= 3 and cmd[0] == "vllm" and cmd[1] == "serve":
         return cmd[2]
