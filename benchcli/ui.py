@@ -369,6 +369,108 @@ MENU_LOGS = "Tail container logs"
 MENU_STOP = "Stop and remove container"
 MENU_QUIT = "Quit"
 
+MENU_COMMANDS = [
+    {
+        "menu": MENU_SERVE,
+        "name": "serve",
+        "aliases": ["serve", "start", "s"],
+        "description": "Start vLLM inference server",
+    },
+    {
+        "menu": MENU_BENCH,
+        "name": "bench",
+        "aliases": ["bench", "benchmark", "b"],
+        "description": "Run vLLM benchmark",
+    },
+    {
+        "menu": MENU_DOWNLOAD_DATASET,
+        "name": "download",
+        "aliases": ["download", "dataset", "data", "d"],
+        "description": "Download benchmark dataset",
+    },
+    {
+        "menu": MENU_MODEL_ROOT,
+        "name": "model",
+        "aliases": ["model", "models", "m"],
+        "description": "Select local model directory",
+    },
+    {
+        "menu": MENU_STATUS,
+        "name": "status",
+        "aliases": ["status", "stat"],
+        "description": "Show container status",
+    },
+    {
+        "menu": MENU_LOGS,
+        "name": "logs",
+        "aliases": ["logs", "log"],
+        "description": "Tail container logs",
+    },
+    {
+        "menu": MENU_STOP,
+        "name": "stop",
+        "aliases": ["stop", "rm", "remove"],
+        "description": "Stop and remove container",
+    },
+    {
+        "menu": MENU_QUIT,
+        "name": "quit",
+        "aliases": ["quit", "exit", "q"],
+        "description": "Quit OpenBench",
+    },
+]
+
+
+def _main_menu_choices() -> list:
+    choices = [
+        command["menu"]
+        for command in MENU_COMMANDS
+        if command["menu"] != MENU_QUIT
+    ]
+    choices.extend([questionary.Separator(), MENU_QUIT])
+    return choices
+
+
+def _resolve_menu_command(raw: str) -> Optional[str]:
+    value = raw.strip().lower()
+    if not value:
+        return None
+    if value.isdigit():
+        index = int(value) - 1
+        commands = [command for command in MENU_COMMANDS]
+        if 0 <= index < len(commands):
+            return commands[index]["menu"]
+        return None
+
+    for command in MENU_COMMANDS:
+        exact_tokens = {command["name"], *command["aliases"]}
+        if value in exact_tokens:
+            return command["menu"]
+
+    matches = []
+    for command in MENU_COMMANDS:
+        tokens = [command["name"], *command["aliases"]]
+        if any(token.startswith(value) for token in tokens):
+            matches.append(command)
+    if len(matches) == 1:
+        return matches[0]["menu"]
+    return None
+
+
+def _show_command_hint() -> None:
+    table = Table(show_header=False, box=None, padding=(0, 1))
+    for index, command in enumerate(MENU_COMMANDS, start=1):
+        table.add_row(f"{index:02d}", command["name"], command["description"])
+    console.print(
+        Panel(
+            table,
+            title="Commands",
+            subtitle="type a command, number, or ?",
+            border_style="bright_blue",
+            padding=(1, 2),
+        )
+    )
+
 
 def main_menu(
     local_model_root: Optional[str] = None,
@@ -379,20 +481,27 @@ def main_menu(
         message += f"  [model dir: {local_model_root}]"
     if selected_local_model:
         message += f" [model: {selected_local_model}]"
-    menu_choices = [
-        MENU_SERVE,
-        MENU_BENCH,
-        MENU_DOWNLOAD_DATASET,
-        MENU_MODEL_ROOT,
-        MENU_STATUS,
-        MENU_LOGS,
-        MENU_STOP,
-        questionary.Separator(),
-        MENU_QUIT,
-    ]
+    hint = "Commands: serve, bench, download, model, status, logs, stop, quit. Type ? for menu."
+    raw = questionary.text(f"{message}\nopenbench >", default="").ask()
+    if raw is None:
+        return MENU_QUIT
+    if raw.strip() in {"", "?", "help"}:
+        _show_command_hint()
+        choice = questionary.select(
+            "Choose a command",
+            choices=_numbered_choices(_main_menu_choices()),
+        ).ask()
+        return choice or MENU_QUIT
+
+    resolved = _resolve_menu_command(raw)
+    if resolved:
+        return resolved
+
+    console.print(f"[yellow]Unknown command:[/yellow] {raw.strip()}")
+    console.print(f"[dim]{hint}[/dim]")
     choice = questionary.select(
-        message,
-        choices=_numbered_choices(menu_choices),
+        "Choose a command",
+        choices=_numbered_choices(_main_menu_choices()),
     ).ask()
     return choice or MENU_QUIT
 

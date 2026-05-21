@@ -87,7 +87,7 @@ class DockerManager:
             proc = subprocess.run(
                 [
                     "nvidia-smi",
-                    "--query-gpu=index,name,memory.total,driver_version",
+                    "--query-gpu=index,name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw,power.limit,driver_version",
                     "--format=csv,noheader,nounits",
                 ],
                 capture_output=True,
@@ -98,15 +98,42 @@ class DockerManager:
             if proc.returncode == 0:
                 for line in proc.stdout.splitlines():
                     parts = [part.strip() for part in line.split(",")]
-                    if len(parts) >= 4:
-                        index, name, memory, driver = parts[:4]
-                        gpus.append(f"GPU {index}: {name} ({memory} MiB, driver {driver})")
+                    if len(parts) >= 9:
+                        index, name, memory_used, memory_total, util, temp, power, power_limit, driver = parts[:9]
+                        gpus.append(
+                            f"GPU {index}: {name} | mem {memory_used}/{memory_total} MiB | "
+                            f"util {util}% | temp {temp}C | power {power}/{power_limit} W | driver {driver}"
+                        )
             else:
                 gpu_error = (proc.stderr or proc.stdout or "nvidia-smi returned non-zero").strip()
         except FileNotFoundError:
             gpu_error = "nvidia-smi not found"
         except Exception as exc:  # noqa: BLE001
             gpu_error = str(exc)
+
+        try:
+            proc = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-compute-apps=gpu_uuid,pid,process_name,used_memory",
+                    "--format=csv,noheader,nounits",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                processes = []
+                for line in proc.stdout.splitlines():
+                    parts = [part.strip() for part in line.split(",")]
+                    if len(parts) >= 4:
+                        gpu_uuid, pid, process_name, used_memory = parts[:4]
+                        processes.append(f"{gpu_uuid[-8:]} pid {pid} {process_name} ({used_memory} MiB)")
+                if processes:
+                    gpus.append("processes: " + "\n           ".join(processes))
+        except Exception:
+            pass
 
         return HostRuntimeInfo(
             docker_server_version=version,
