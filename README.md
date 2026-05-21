@@ -40,6 +40,11 @@ enter an HF id/path manually. BenchCli detects model directories that contain
 mounts the chosen root at `/models` inside the container, and passes the
 selected model's container path to `vllm serve`.
 
+The `Extra vllm serve args` step shows selectable ModelConfig options from the
+vLLM serve CLI docs with Chinese descriptions. Select one or more options, then
+BenchCli will ask for the required value for each option. For local models, HF
+cache and HF token prompts are skipped.
+
 ## Requirements
 
 - Docker daemon reachable from the current user.
