@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "benchcli"
+version = "0.1.0"
+description = "Interactive CLI for running vLLM inference containers and `vllm bench serve` benchmarks."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "BenchCli" }]
+dependencies = [
+    "typer>=0.12.0",
+    "rich>=13.7.0",
+    "questionary>=2.0.1",
+    "docker>=7.1.0",
+    "pydantic>=2.6.0",
+]
+
+[project.scripts]
+benchcli = "benchcli.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["benchcli"]
