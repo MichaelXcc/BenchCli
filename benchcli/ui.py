@@ -64,17 +64,22 @@ def show_status(info: Optional[ContainerInfo]) -> None:
 
 MENU_SERVE = "Start vLLM inference server"
 MENU_BENCH = "Run `vllm bench serve`"
-MENU_MODEL_ROOT = "Set local model directory"
+MENU_MODEL_ROOT = "Set local model directory and select model"
 MENU_STATUS = "Show container status"
 MENU_LOGS = "Tail container logs"
 MENU_STOP = "Stop and remove container"
 MENU_QUIT = "Quit"
 
 
-def main_menu(local_model_root: Optional[str] = None) -> str:
+def main_menu(
+    local_model_root: Optional[str] = None,
+    selected_local_model: Optional[str] = None,
+) -> str:
     message = "What do you want to do?"
     if local_model_root:
         message += f"  [model dir: {local_model_root}]"
+    if selected_local_model:
+        message += f" [model: {selected_local_model}]"
     choice = questionary.select(
         message,
         choices=[
@@ -163,6 +168,13 @@ def _container_model_path(model_dir: Path, mount_root: Path) -> str:
     return container_path.as_posix()
 
 
+def _local_model_label(model: str, root: Optional[str]) -> str:
+    if root and model.startswith(DEFAULT_CONTAINER_MODEL_ROOT):
+        relative = model.removeprefix(DEFAULT_CONTAINER_MODEL_ROOT).lstrip("/")
+        return relative or Path(root).name
+    return model
+
+
 def prompt_local_model_root(default: Optional[str] = None) -> str:
     while True:
         root_raw = _ask_text("Local model root directory", default=default or "")
@@ -183,6 +195,7 @@ def _select_model_from_root(root: Path) -> tuple[str, str]:
         )
         raise KeyboardInterrupt
 
+    console.print(f"[cyan]Found {len(model_dirs)} local model(s) under {root}.[/cyan]")
     choices = [
         questionary.Choice(
             title=str(model_dir.relative_to(root)),
@@ -197,6 +210,11 @@ def _select_model_from_root(root: Path) -> tuple[str, str]:
     return _container_model_path(selected.resolve(), mount_root), str(mount_root)
 
 
+def prompt_local_model(default_root: Optional[str] = None) -> tuple[str, str]:
+    root = Path(prompt_local_model_root(default=default_root))
+    return _select_model_from_root(root)
+
+
 def _prompt_manual_model(default_model: Optional[str] = None) -> str:
     model = _ask_text("Model (HF id or local path)", default=default_model or "")
     while not model:
@@ -208,12 +226,19 @@ def _prompt_manual_model(default_model: Optional[str] = None) -> str:
 def _prompt_model(
     default_model: Optional[str] = None,
     local_model_root: Optional[str] = None,
+    selected_local_model: Optional[str] = None,
 ) -> tuple[str, Optional[str]]:
+    use_selected_choice = "Use selected local model"
     local_choice = "Select local model from configured directory"
     change_choice = "Change local model directory and select model"
     manual_choice = "Enter HF id or path manually"
     choices = []
-    if local_model_root:
+    if selected_local_model and local_model_root:
+        label = _local_model_label(selected_local_model, local_model_root)
+        choices.append(questionary.Choice(f"{use_selected_choice} ({label})", use_selected_choice))
+        choices.append(local_choice)
+        choices.append(change_choice)
+    elif local_model_root:
         choices.append(questionary.Choice(f"{local_choice} ({local_model_root})", local_choice))
         choices.append(change_choice)
     else:
@@ -225,13 +250,15 @@ def _prompt_model(
         choices=choices,
     ).ask() or manual_choice
 
+    if method == use_selected_choice and selected_local_model and local_model_root:
+        return selected_local_model, local_model_root
+
     if method == manual_choice:
         return _prompt_manual_model(default_model=default_model), None
 
-    if method == change_choice or not local_model_root:
-        local_model_root = prompt_local_model_root(default=local_model_root)
-
     try:
+        if method == change_choice or not local_model_root:
+            return prompt_local_model(default_root=local_model_root)
         return _select_model_from_root(Path(local_model_root))
     except KeyboardInterrupt:
         console.print("[yellow]Falling back to manual model input.[/yellow]")
@@ -241,12 +268,14 @@ def _prompt_model(
 def prompt_serve_config(
     default_model: Optional[str] = None,
     local_model_root: Optional[str] = None,
+    selected_local_model: Optional[str] = None,
 ) -> ServeConfig:
     image = _ask_text("Docker image", default=DEFAULT_IMAGE)
     container_name = _ask_text("Container name", default=DEFAULT_CONTAINER_NAME)
     model, model_mount_dir = _prompt_model(
         default_model=default_model,
         local_model_root=local_model_root,
+        selected_local_model=selected_local_model,
     )
     host_port = _ask_int("Host port", default=DEFAULT_HOST_PORT)
     gpus = _ask_text("GPUs (all / count / none)", default="all")

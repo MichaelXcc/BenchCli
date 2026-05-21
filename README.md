@@ -30,13 +30,15 @@ benchcli status    # show current container
 benchcli stop      # stop and remove the container
 ```
 
-In the interactive menu, choose `Set local model directory` to set or change the
-host directory used to discover local models. When starting a server, the
-`Model` prompt lets you select a discovered local model from that directory,
-change the directory, or enter an HF id/path manually. BenchCli detects model
-directories that contain `config.json` and a weight file such as `.safetensors`,
-`.bin`, or `.gguf`, mounts the chosen root at `/models` inside the container,
-and passes the selected model's container path to `vllm serve`.
+In the interactive menu, choose `Set local model directory and select model` to
+set or change the host directory used to discover local models. BenchCli then
+shows every discovered model under that directory and asks which one to use.
+When starting a server, the `Model` prompt lets you use that selected local
+model, choose another model from the same directory, change the directory, or
+enter an HF id/path manually. BenchCli detects model directories that contain
+`config.json` and a weight file such as `.safetensors`, `.bin`, or `.gguf`,
+mounts the chosen root at `/models` inside the container, and passes the
+selected model's container path to `vllm serve`.
 
 ## Requirements
 

@@ -170,16 +170,24 @@ def stop(
 def _interactive_loop() -> None:
     dm = _manager()
     local_model_root: Optional[str] = None
+    selected_local_model: Optional[str] = None
     ui.banner()
     while True:
-        choice = ui.main_menu(local_model_root=local_model_root)
+        choice = ui.main_menu(
+            local_model_root=local_model_root,
+            selected_local_model=selected_local_model,
+        )
         if choice == ui.MENU_QUIT:
             return
         try:
             if choice == ui.MENU_SERVE:
-                cfg = ui.prompt_serve_config(local_model_root=local_model_root)
+                cfg = ui.prompt_serve_config(
+                    local_model_root=local_model_root,
+                    selected_local_model=selected_local_model,
+                )
                 if cfg.model_mount_dir:
                     local_model_root = cfg.model_mount_dir
+                    selected_local_model = cfg.model
                 ui.console.print(f"[cyan]Starting {cfg.container_name}…[/cyan]")
                 container = dm.start_vllm(cfg)
                 ui.console.print(
@@ -196,8 +204,12 @@ def _interactive_loop() -> None:
                 cfg = ui.prompt_bench_config(default_model=default_model)
                 dm.exec_interactive(DEFAULT_CONTAINER_NAME, cfg.vllm_bench_command())
             elif choice == ui.MENU_MODEL_ROOT:
-                local_model_root = ui.prompt_local_model_root(default=local_model_root)
-                ui.console.print(f"[green]Local model directory set to {local_model_root}.[/green]")
+                selected_local_model, local_model_root = ui.prompt_local_model(
+                    default_root=local_model_root
+                )
+                ui.console.print(
+                    f"[green]Selected local model {selected_local_model} from {local_model_root}.[/green]"
+                )
             elif choice == ui.MENU_STATUS:
                 ui.show_status(dm.info(DEFAULT_CONTAINER_NAME))
             elif choice == ui.MENU_LOGS:
