@@ -1,6 +1,7 @@
 """Interactive prompts and rich output helpers."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import shlex
 from typing import Optional
@@ -787,6 +788,64 @@ def _local_model_label(model: str, root: Optional[str]) -> str:
     return model
 
 
+def show_model_config(model_dir: Path) -> None:
+    config_path = model_dir / MODEL_CONFIG_FILE
+    if not config_path.is_file():
+        console.print(
+            Panel(
+                f"[yellow]No {MODEL_CONFIG_FILE} found in {model_dir}.[/yellow]",
+                title="Model Config",
+                border_style="yellow",
+                padding=(1, 2),
+            )
+        )
+        return
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        console.print(
+            Panel(
+                f"[yellow]Could not read {config_path}: {exc}[/yellow]",
+                title="Model Config",
+                border_style="yellow",
+                padding=(1, 2),
+            )
+        )
+        return
+
+    fields = [
+        ("model_type", "Model type"),
+        ("architectures", "Architectures"),
+        ("torch_dtype", "DType"),
+        ("hidden_size", "Hidden size"),
+        ("num_hidden_layers", "Layers"),
+        ("num_attention_heads", "Attention heads"),
+        ("num_key_value_heads", "KV heads"),
+        ("intermediate_size", "Intermediate size"),
+        ("vocab_size", "Vocab size"),
+        ("max_position_embeddings", "Context length"),
+        ("rope_theta", "RoPE theta"),
+        ("sliding_window", "Sliding window"),
+    ]
+    table = Table(show_header=False, box=None, padding=(0, 1))
+    table.add_row("path", str(model_dir))
+    for key, label in fields:
+        if key not in config:
+            continue
+        value = config[key]
+        if isinstance(value, list):
+            value = ", ".join(str(item) for item in value)
+        table.add_row(label, str(value))
+    console.print(
+        Panel(
+            table,
+            title="Model Config",
+            border_style="bright_cyan",
+            padding=(1, 2),
+        )
+    )
+
+
 def prompt_local_model_root(default: Optional[str] = None) -> str:
     while True:
         root_raw = _ask_text("Local model root directory", default=default or "")
@@ -824,6 +883,7 @@ def _select_model_from_root(root: Path) -> tuple[str, str]:
         raise BackRequested
     if selected is None:
         raise KeyboardInterrupt
+    show_model_config(selected)
     mount_root = root.resolve()
     return _container_model_path(selected.resolve(), mount_root), str(mount_root)
 
