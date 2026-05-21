@@ -469,6 +469,11 @@ def _resolve_menu_command(raw: str) -> Optional[str]:
     value = raw.strip().lower()
     if not value:
         return None
+    if not value.startswith("/"):
+        return None
+    value = value[1:]
+    if value == "help":
+        return None
     if value.isdigit():
         index = int(value) - 1
         commands = [command for command in MENU_COMMANDS]
@@ -494,12 +499,12 @@ def _resolve_menu_command(raw: str) -> Optional[str]:
 def _show_command_hint() -> None:
     table = Table(show_header=False, box=None, padding=(0, 1))
     for index, command in enumerate(MENU_COMMANDS, start=1):
-        table.add_row(f"{index:02d}", command["name"], command["description"])
+        table.add_row(f"{index:02d}", f"/{command['name']}", command["description"])
     console.print(
         Panel(
             table,
             title="Commands",
-            subtitle="type a command, number, or ?",
+            subtitle="type /serve, /bench, /help, or /1",
             border_style="bright_blue",
             padding=(1, 2),
         )
@@ -515,11 +520,12 @@ def main_menu(
         message += f"  [model dir: {local_model_root}]"
     if selected_local_model:
         message += f" [model: {selected_local_model}]"
-    hint = "Commands: serve, bench, download, model, status, logs, stop, quit. Type ? for menu."
-    raw = questionary.text(f"{message}\nopenbench >", default="").ask()
+    hint = "Commands use slash style: /serve, /bench, /download, /model, /status, /logs, /stop, /quit. Type /help."
+    raw = questionary.text(f"{message}\nopenbench /", default="").ask()
     if raw is None:
         return MENU_QUIT
-    if raw.strip() in {"", "?", "help"}:
+    stripped = raw.strip()
+    if stripped in {"", "?", "help", "/help"}:
         _show_command_hint()
         choice = questionary.select(
             "Choose a command",
@@ -527,7 +533,13 @@ def main_menu(
         ).ask()
         return choice or MENU_QUIT
 
-    resolved = _resolve_menu_command(raw)
+    command_text = stripped if stripped.startswith("/") else f"/{stripped}"
+    if not stripped.startswith("/"):
+        console.print(f"[yellow]Slash command required.[/yellow] Did you mean [bold]{command_text}[/bold]?")
+        console.print(f"[dim]{hint}[/dim]")
+        return main_menu(local_model_root=local_model_root, selected_local_model=selected_local_model)
+
+    resolved = _resolve_menu_command(stripped)
     if resolved:
         return resolved
 
