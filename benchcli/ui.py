@@ -64,18 +64,23 @@ def show_status(info: Optional[ContainerInfo]) -> None:
 
 MENU_SERVE = "Start vLLM inference server"
 MENU_BENCH = "Run `vllm bench serve`"
+MENU_MODEL_ROOT = "Set local model directory"
 MENU_STATUS = "Show container status"
 MENU_LOGS = "Tail container logs"
 MENU_STOP = "Stop and remove container"
 MENU_QUIT = "Quit"
 
 
-def main_menu() -> str:
+def main_menu(local_model_root: Optional[str] = None) -> str:
+    message = "What do you want to do?"
+    if local_model_root:
+        message += f"  [model dir: {local_model_root}]"
     choice = questionary.select(
-        "What do you want to do?",
+        message,
         choices=[
             MENU_SERVE,
             MENU_BENCH,
+            MENU_MODEL_ROOT,
             MENU_STATUS,
             MENU_LOGS,
             MENU_STOP,
@@ -158,37 +163,25 @@ def _container_model_path(model_dir: Path, mount_root: Path) -> str:
     return container_path.as_posix()
 
 
-def _prompt_model() -> tuple[str, Optional[str]]:
-    method = questionary.select(
-        "Model source",
-        choices=[
-            "Enter HF id or path manually",
-            "Scan local directory for models",
-        ],
-    ).ask() or "Enter HF id or path manually"
-
-    if method == "Enter HF id or path manually":
-        model = _ask_text("Model (HF id or local path)", default="")
-        while not model:
-            console.print("[red]Model is required.[/red]")
-            model = _ask_text("Model (HF id or local path)", default="")
-        return model, None
-
+def prompt_local_model_root(default: Optional[str] = None) -> str:
     while True:
-        root_raw = _ask_text("Local model root directory", default="")
+        root_raw = _ask_text("Local model root directory", default=default or "")
+        if not root_raw:
+            console.print("[red]Local model root directory is required.[/red]")
+            continue
         root = Path(root_raw).expanduser()
         if root.is_dir():
-            break
+            return str(root.resolve())
         console.print(f"[red]{root_raw!r} is not a directory.[/red]")
 
+
+def _select_model_from_root(root: Path) -> tuple[str, str]:
     model_dirs = _discover_model_dirs(root)
     if not model_dirs:
-        console.print("[yellow]No model directories found. Falling back to manual input.[/yellow]")
-        model = _ask_text("Model (HF id or local path)", default="")
-        while not model:
-            console.print("[red]Model is required.[/red]")
-            model = _ask_text("Model (HF id or local path)", default="")
-        return model, None
+        console.print(
+            "[yellow]No model directories found under this directory.[/yellow]"
+        )
+        raise KeyboardInterrupt
 
     choices = [
         questionary.Choice(
@@ -197,21 +190,64 @@ def _prompt_model() -> tuple[str, Optional[str]]:
         )
         for model_dir in model_dirs
     ]
-    selected = questionary.select("Select model directory", choices=choices).ask()
+    selected = questionary.select("Select local model", choices=choices).ask()
     if selected is None:
         raise KeyboardInterrupt
     mount_root = root.resolve()
     return _container_model_path(selected.resolve(), mount_root), str(mount_root)
 
 
-def prompt_serve_config(default_model: Optional[str] = None) -> ServeConfig:
+def _prompt_manual_model(default_model: Optional[str] = None) -> str:
+    model = _ask_text("Model (HF id or local path)", default=default_model or "")
+    while not model:
+        console.print("[red]Model is required.[/red]")
+        model = _ask_text("Model (HF id or local path)", default="")
+    return model
+
+
+def _prompt_model(
+    default_model: Optional[str] = None,
+    local_model_root: Optional[str] = None,
+) -> tuple[str, Optional[str]]:
+    local_choice = "Select local model from configured directory"
+    change_choice = "Change local model directory and select model"
+    manual_choice = "Enter HF id or path manually"
+    choices = []
+    if local_model_root:
+        choices.append(questionary.Choice(f"{local_choice} ({local_model_root})", local_choice))
+        choices.append(change_choice)
+    else:
+        choices.append(questionary.Choice("Set local model directory and select model", change_choice))
+    choices.append(manual_choice)
+
+    method = questionary.select(
+        "Model",
+        choices=choices,
+    ).ask() or manual_choice
+
+    if method == manual_choice:
+        return _prompt_manual_model(default_model=default_model), None
+
+    if method == change_choice or not local_model_root:
+        local_model_root = prompt_local_model_root(default=local_model_root)
+
+    try:
+        return _select_model_from_root(Path(local_model_root))
+    except KeyboardInterrupt:
+        console.print("[yellow]Falling back to manual model input.[/yellow]")
+        return _prompt_manual_model(default_model=default_model), None
+
+
+def prompt_serve_config(
+    default_model: Optional[str] = None,
+    local_model_root: Optional[str] = None,
+) -> ServeConfig:
     image = _ask_text("Docker image", default=DEFAULT_IMAGE)
     container_name = _ask_text("Container name", default=DEFAULT_CONTAINER_NAME)
-    if default_model:
-        model = _ask_text("Model (HF id or local path)", default=default_model)
-        model_mount_dir = None
-    else:
-        model, model_mount_dir = _prompt_model()
+    model, model_mount_dir = _prompt_model(
+        default_model=default_model,
+        local_model_root=local_model_root,
+    )
     host_port = _ask_int("Host port", default=DEFAULT_HOST_PORT)
     gpus = _ask_text("GPUs (all / count / none)", default="all")
     hf_cache_dir = _ask_text("Host HF cache dir", default=DEFAULT_HF_CACHE)
