@@ -22,7 +22,6 @@ setup(
     entry_points={
         "console_scripts": [
             "openbench=benchcli.cli:app",
-            "benchcli=benchcli.cli:app",
         ]
     },
 )

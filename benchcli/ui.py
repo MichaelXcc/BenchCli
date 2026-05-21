@@ -7,6 +7,7 @@ from typing import Optional
 
 import questionary
 from rich.console import Console
+from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -234,19 +235,52 @@ DOWNLOADABLE_DATASETS = {
 def banner(runtime: Optional[HostRuntimeInfo] = None) -> None:
     table = Table(show_header=False, box=None, padding=(0, 1))
     table.add_row("workspace", DEFAULT_WORKSPACE_MOUNT)
+    renderables = [table]
     if runtime:
         table.add_row("docker", runtime.docker_server_version)
         table.add_row("runtime", runtime.docker_default_runtime)
         table.add_row("gpu runtime", "available" if runtime.nvidia_runtime else "not detected")
         table.add_row("runtimes", ", ".join(runtime.docker_runtimes) or "unknown")
         if runtime.gpus:
-            table.add_row("gpu", "\n".join(runtime.gpus))
+            gpu_table = Table(title="GPU Usage", border_style="bright_black", expand=True)
+            gpu_table.add_column("#", justify="right")
+            gpu_table.add_column("Name", ratio=3, overflow="fold")
+            gpu_table.add_column("Memory", justify="right")
+            gpu_table.add_column("Util", justify="right")
+            gpu_table.add_column("Temp", justify="right")
+            gpu_table.add_column("Power", justify="right")
+            gpu_table.add_column("Driver")
+            for gpu in runtime.gpus:
+                gpu_table.add_row(
+                    gpu.index,
+                    gpu.name,
+                    f"{gpu.memory_used_mib}/{gpu.memory_total_mib} MiB",
+                    f"{gpu.utilization_percent}%",
+                    f"{gpu.temperature_c}C",
+                    f"{gpu.power_draw_w}/{gpu.power_limit_w} W",
+                    gpu.driver_version,
+                )
+            renderables.append(gpu_table)
+            if runtime.gpu_processes:
+                proc_table = Table(title="GPU Processes", border_style="bright_black", expand=True)
+                proc_table.add_column("GPU", justify="right")
+                proc_table.add_column("PID", justify="right")
+                proc_table.add_column("Process", ratio=3, overflow="fold")
+                proc_table.add_column("Memory", justify="right")
+                for process in runtime.gpu_processes:
+                    proc_table.add_row(
+                        process.gpu_uuid[-8:],
+                        process.pid,
+                        process.process_name,
+                        f"{process.used_memory_mib} MiB",
+                    )
+                renderables.append(proc_table)
         else:
             table.add_row("gpu", runtime.gpu_error or "not detected")
 
     console.print(
         Panel(
-            table,
+            Group(*renderables),
             title=Text.assemble(("OpenBench", "bold bright_cyan"), ("  Environment", "white")),
             subtitle="Use arrow keys to navigate. Ctrl-C to quit.",
             border_style="bright_cyan",

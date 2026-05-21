@@ -20,7 +20,6 @@ dependencies = [
 
 [project.scripts]
 openbench = "benchcli.cli:app"
-benchcli = "benchcli.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["benchcli"]

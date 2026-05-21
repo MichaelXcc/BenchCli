@@ -50,9 +50,6 @@ openbench status    # show current container
 openbench stop      # stop and remove the container
 ```
 
-The legacy `benchcli` console command is still installed as a compatibility
-alias, but new usage should prefer `openbench`.
-
 In the interactive menu, choose `Set local model directory and select model` to
 set or change the host directory used to discover local models. OpenBench then
 shows every discovered model under that directory and asks which one to use.

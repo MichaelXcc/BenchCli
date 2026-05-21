@@ -27,12 +27,34 @@ class ContainerInfo:
 
 
 @dataclass
+class GpuInfo:
+    index: str
+    name: str
+    memory_used_mib: str
+    memory_total_mib: str
+    utilization_percent: str
+    temperature_c: str
+    power_draw_w: str
+    power_limit_w: str
+    driver_version: str
+
+
+@dataclass
+class GpuProcessInfo:
+    gpu_uuid: str
+    pid: str
+    process_name: str
+    used_memory_mib: str
+
+
+@dataclass
 class HostRuntimeInfo:
     docker_server_version: str
     docker_default_runtime: str
     docker_runtimes: list[str]
     nvidia_runtime: bool
-    gpus: list[str]
+    gpus: list[GpuInfo]
+    gpu_processes: list[GpuProcessInfo]
     gpu_error: Optional[str] = None
 
 
@@ -81,7 +103,8 @@ class DockerManager:
         runtimes = sorted((docker_info.get("Runtimes") or {}).keys())
         default_runtime = docker_info.get("DefaultRuntime") or "unknown"
 
-        gpus: list[str] = []
+        gpus: list[GpuInfo] = []
+        gpu_processes: list[GpuProcessInfo] = []
         gpu_error = None
         try:
             proc = subprocess.run(
@@ -101,8 +124,17 @@ class DockerManager:
                     if len(parts) >= 9:
                         index, name, memory_used, memory_total, util, temp, power, power_limit, driver = parts[:9]
                         gpus.append(
-                            f"GPU {index}: {name} | mem {memory_used}/{memory_total} MiB | "
-                            f"util {util}% | temp {temp}C | power {power}/{power_limit} W | driver {driver}"
+                            GpuInfo(
+                                index=index,
+                                name=name,
+                                memory_used_mib=memory_used,
+                                memory_total_mib=memory_total,
+                                utilization_percent=util,
+                                temperature_c=temp,
+                                power_draw_w=power,
+                                power_limit_w=power_limit,
+                                driver_version=driver,
+                            )
                         )
             else:
                 gpu_error = (proc.stderr or proc.stdout or "nvidia-smi returned non-zero").strip()
@@ -124,14 +156,18 @@ class DockerManager:
                 check=False,
             )
             if proc.returncode == 0 and proc.stdout.strip():
-                processes = []
                 for line in proc.stdout.splitlines():
                     parts = [part.strip() for part in line.split(",")]
                     if len(parts) >= 4:
                         gpu_uuid, pid, process_name, used_memory = parts[:4]
-                        processes.append(f"{gpu_uuid[-8:]} pid {pid} {process_name} ({used_memory} MiB)")
-                if processes:
-                    gpus.append("processes: " + "\n           ".join(processes))
+                        gpu_processes.append(
+                            GpuProcessInfo(
+                                gpu_uuid=gpu_uuid,
+                                pid=pid,
+                                process_name=process_name,
+                                used_memory_mib=used_memory,
+                            )
+                        )
         except Exception:
             pass
 
@@ -141,6 +177,7 @@ class DockerManager:
             docker_runtimes=runtimes,
             nvidia_runtime="nvidia" in runtimes,
             gpus=gpus,
+            gpu_processes=gpu_processes,
             gpu_error=gpu_error,
         )
 
