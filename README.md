@@ -61,6 +61,10 @@ stored under `./datasets` on the host, so they are visible inside the container
 as `/workspace/benchcli/datasets/...`. The `Run vllm bench serve` flow shows the
 resolved benchmark configuration and command before executing it in the running
 container.
+For older vLLM images that do not include `vllm bench serve`, BenchCli probes the
+container and can use the legacy-compatible command
+`python -m vllm.benchmarks.benchmark_serving` instead. You can also enter a
+custom benchmark command in the interactive benchmark flow.
 
 ## Requirements
 

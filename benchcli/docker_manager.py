@@ -154,6 +154,47 @@ class DockerManager:
             raise DockerError(f"Container {name!r} not found.")
         return c.logs(stream=True, follow=True, tail=tail)
 
+    def exec_output(
+        self,
+        name: str,
+        command: list[str],
+        workdir: Optional[str] = None,
+        timeout: int = 10,
+    ) -> tuple[int, str]:
+        c = self.find(name)
+        if c is None:
+            raise DockerError(f"Container {name!r} not found.")
+        argv = ["docker", "exec"]
+        if workdir:
+            argv += ["-w", workdir]
+        argv += [name, *command]
+        proc = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        return proc.returncode, proc.stdout + proc.stderr
+
+    def detect_bench_command(
+        self,
+        name: str,
+        workdir: Optional[str] = None,
+    ) -> list[str]:
+        candidates = [
+            ["vllm", "bench", "serve"],
+            ["python", "-m", "vllm.benchmarks.benchmark_serving"],
+        ]
+        for candidate in candidates:
+            try:
+                rc, _ = self.exec_output(name, [*candidate, "--help"], workdir=workdir)
+            except (subprocess.TimeoutExpired, DockerError):
+                continue
+            if rc == 0:
+                return candidate
+        return candidates[0]
+
     def exec_interactive(
         self,
         name: str,

@@ -112,8 +112,12 @@ def bench(
         raise typer.Exit(code=1)
 
     default_model = model or _resolve_running_model(dm, container_name) or ""
+    default_bench_command = dm.detect_bench_command(container_name, workdir=DEFAULT_WORKSPACE_MOUNT)
     if interactive:
-        cfg = ui.prompt_bench_config(default_model=default_model)
+        cfg = ui.prompt_bench_config(
+            default_model=default_model,
+            default_bench_command=default_bench_command,
+        )
     else:
         if not default_model:
             ui.console.print("[red]--model is required when --no-interactive.[/red]")
@@ -227,7 +231,14 @@ def _interactive_loop() -> None:
                     )
                     continue
                 default_model = _resolve_running_model(dm, DEFAULT_CONTAINER_NAME) or ""
-                cfg = ui.prompt_bench_config(default_model=default_model)
+                default_bench_command = dm.detect_bench_command(
+                    DEFAULT_CONTAINER_NAME,
+                    workdir=DEFAULT_WORKSPACE_MOUNT,
+                )
+                cfg = ui.prompt_bench_config(
+                    default_model=default_model,
+                    default_bench_command=default_bench_command,
+                )
                 dm.exec_interactive(
                     DEFAULT_CONTAINER_NAME,
                     cfg.vllm_bench_command(),

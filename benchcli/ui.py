@@ -775,6 +775,7 @@ def _prompt_dataset_path(default: Optional[str] = None) -> Optional[str]:
 
 def show_bench_config(cfg: BenchConfig) -> None:
     table = Table(title="vLLM bench serve config", show_header=False, border_style="cyan")
+    table.add_row("bench_command", " ".join(shlex.quote(arg) for arg in cfg.bench_command))
     table.add_row("model", cfg.model)
     table.add_row("backend", cfg.backend)
     table.add_row("base_url", cfg.base_url or f"{cfg.host}:{cfg.port}")
@@ -796,8 +797,39 @@ def show_bench_config(cfg: BenchConfig) -> None:
     console.print(table)
 
 
-def prompt_bench_config(default_model: str) -> BenchConfig:
+def _prompt_bench_command(default_command: list[str]) -> list[str]:
+    modern = ["vllm", "bench", "serve"]
+    legacy_module = ["python", "-m", "vllm.benchmarks.benchmark_serving"]
+    custom = "__custom__"
+    default_key = "modern"
+    if default_command == legacy_module:
+        default_key = "legacy_module"
+    choices = [
+        questionary.Choice("新版: vllm bench serve", value="modern"),
+        questionary.Choice("旧版兼容: python -m vllm.benchmarks.benchmark_serving", value="legacy_module"),
+        questionary.Choice("自定义 benchmark 命令", value=custom),
+    ]
+    selected = questionary.select(
+        "Benchmark command",
+        choices=choices,
+        default=default_key,
+    ).ask()
+    if selected is None:
+        raise BackRequested
+    if selected == "modern":
+        return modern
+    if selected == "legacy_module":
+        return legacy_module
+    raw = _ask_text("Custom benchmark command", default=" ".join(default_command))
+    return shlex.split(raw)
+
+
+def prompt_bench_config(
+    default_model: str,
+    default_bench_command: Optional[list[str]] = None,
+) -> BenchConfig:
     step = 0
+    bench_command = default_bench_command or ["vllm", "bench", "serve"]
     model = default_model
     backend = "openai"
     base_url: Optional[str] = "http://localhost:8000"
@@ -811,21 +843,23 @@ def prompt_bench_config(default_model: str) -> BenchConfig:
     result_dir: Optional[str] = None
     extra_args: list[str] = []
 
-    while step < 10:
+    while step < 11:
         try:
             if step == 0:
-                model = _ask_text("Model served by vLLM", default=model)
+                bench_command = _prompt_bench_command(bench_command)
             elif step == 1:
+                model = _ask_text("Model served by vLLM", default=model)
+            elif step == 2:
                 backend = questionary.select(
                     "Backend",
                     choices=["openai", "openai-chat", "vllm", "tgi", "deepspeed-mii"],
                     default=backend,
                 ).ask() or backend
-            elif step == 2:
-                base_url = _ask_text("Base URL inside container", default=base_url or "")
             elif step == 3:
-                endpoint = _ask_text("Endpoint", default=endpoint)
+                base_url = _ask_text("Base URL inside container", default=base_url or "")
             elif step == 4:
+                endpoint = _ask_text("Endpoint", default=endpoint)
+            elif step == 5:
                 selected = questionary.select(
                     "Dataset name",
                     choices=[questionary.Choice(title="← Back", value=BACK_CHOICE), questionary.Separator(), *BENCH_DATASET_NAMES],
@@ -834,20 +868,20 @@ def prompt_bench_config(default_model: str) -> BenchConfig:
                 if selected == BACK_CHOICE:
                     raise BackRequested
                 dataset_name = selected or dataset_name
-            elif step == 5:
-                dataset_path = _prompt_dataset_path(default=dataset_path)
             elif step == 6:
-                num_prompts = _ask_int("Number of prompts", default=num_prompts)
+                dataset_path = _prompt_dataset_path(default=dataset_path)
             elif step == 7:
+                num_prompts = _ask_int("Number of prompts", default=num_prompts)
+            elif step == 8:
                 request_rate = _ask_float("Request rate (req/s, 'inf' for max)", default=request_rate)
                 max_concurrency = _ask_optional_int("Max concurrency", default=max_concurrency)
-            elif step == 8:
+            elif step == 9:
                 save_result = questionary.confirm("Save result JSON?", default=save_result).ask() or False
                 if save_result:
                     result_dir = _ask_text("Result dir inside container", default=result_dir or f"{DEFAULT_WORKSPACE_MOUNT}/results")
                 else:
                     result_dir = None
-            elif step == 9:
+            elif step == 10:
                 extra_args = _prompt_vllm_bench_extra_args(dataset_name)
             step += 1
         except BackRequested:
@@ -856,6 +890,7 @@ def prompt_bench_config(default_model: str) -> BenchConfig:
             step = max(0, step - 1)
 
     cfg = BenchConfig(
+        bench_command=bench_command,
         model=model,
         backend=backend,
         base_url=base_url or None,

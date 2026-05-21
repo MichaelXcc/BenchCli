@@ -56,6 +56,7 @@ class BenchConfig(BaseModel):
     """Parameters for `vllm bench serve` executed inside the container."""
 
     model: str
+    bench_command: list[str] = Field(default_factory=lambda: ["vllm", "bench", "serve"])
     backend: str = "openai"
     base_url: Optional[str] = "http://localhost:8000"
     host: str = "127.0.0.1"
@@ -72,9 +73,7 @@ class BenchConfig(BaseModel):
 
     def vllm_bench_command(self) -> list[str]:
         cmd = [
-            "vllm",
-            "bench",
-            "serve",
+            *self.bench_command,
             "--model",
             self.model,
             "--backend",
