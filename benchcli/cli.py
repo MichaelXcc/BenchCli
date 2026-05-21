@@ -1,6 +1,7 @@
 """BenchCli command-line entry point."""
 from __future__ import annotations
 
+import urllib.request
 from typing import Optional
 
 import typer
@@ -10,6 +11,7 @@ from .config import (
     DEFAULT_CONTAINER_NAME,
     DEFAULT_HOST_PORT,
     DEFAULT_IMAGE,
+    DEFAULT_WORKSPACE_MOUNT,
     BenchConfig,
     ServeConfig,
 )
@@ -118,10 +120,27 @@ def bench(
             raise typer.Exit(code=2)
         cfg = BenchConfig(model=default_model)
 
-    rc = dm.exec_interactive(container_name, cfg.vllm_bench_command())
+    rc = dm.exec_interactive(
+        container_name,
+        cfg.vllm_bench_command(),
+        workdir=DEFAULT_WORKSPACE_MOUNT,
+    )
     if rc != 0:
         ui.console.print(f"[yellow]Benchmark exited with code {rc}.[/yellow]")
         raise typer.Exit(code=rc)
+
+
+@app.command("download-dataset")
+def download_dataset() -> None:
+    """Download a benchmark dataset to the host workspace."""
+    url, output_path = ui.prompt_dataset_download()
+    ui.console.print(f"[cyan]Downloading[/cyan] {url}")
+    try:
+        urllib.request.urlretrieve(url, output_path)
+    except Exception as exc:  # noqa: BLE001
+        ui.console.print(f"[red]Failed to download dataset: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    ui.console.print(f"[green]Downloaded[/green] {output_path}")
 
 
 @app.command()
@@ -209,7 +228,20 @@ def _interactive_loop() -> None:
                     continue
                 default_model = _resolve_running_model(dm, DEFAULT_CONTAINER_NAME) or ""
                 cfg = ui.prompt_bench_config(default_model=default_model)
-                dm.exec_interactive(DEFAULT_CONTAINER_NAME, cfg.vllm_bench_command())
+                dm.exec_interactive(
+                    DEFAULT_CONTAINER_NAME,
+                    cfg.vllm_bench_command(),
+                    workdir=DEFAULT_WORKSPACE_MOUNT,
+                )
+            elif choice == ui.MENU_DOWNLOAD_DATASET:
+                url, output_path = ui.prompt_dataset_download()
+                ui.console.print(f"[cyan]Downloading[/cyan] {url}")
+                try:
+                    urllib.request.urlretrieve(url, output_path)
+                except Exception as exc:  # noqa: BLE001
+                    ui.console.print(f"[red]Failed to download dataset: {exc}[/red]")
+                    continue
+                ui.console.print(f"[green]Downloaded[/green] {output_path}")
             elif choice == ui.MENU_MODEL_ROOT:
                 selected_local_model, local_model_root = ui.prompt_local_model(
                     default_root=local_model_root

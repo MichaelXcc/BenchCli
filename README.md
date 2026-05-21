@@ -10,6 +10,8 @@ against it, with a Claude-style interactive menu.
 - Scan a local model root directory in the interactive flow and select any
   discovered model directory under it.
 - Run `vllm bench serve` inside the running container with guided parameters.
+- Download benchmark datasets on the host into `datasets/`, then use them from
+  inside the container through the workspace mount.
 - Interactive main menu (arrow keys), or direct subcommands for scripting.
 
 ## Install (dev)
@@ -26,6 +28,7 @@ Then run:
 benchcli           # interactive menu
 benchcli serve     # start vLLM server
 benchcli bench     # run `vllm bench serve` inside the container
+benchcli download-dataset  # download a benchmark dataset to ./datasets
 benchcli status    # show current container
 benchcli stop      # stop and remove the container
 ```
@@ -51,6 +54,13 @@ During interactive prompts, enter `:back` in text or number fields to return to
 the previous step. Selection prompts include a `← Back` option.
 For the GPU prompt, enter `all` for every GPU, `none` for CPU/no GPU, a count
 such as `2`, or explicit GPU ids such as `0` or `0,1`.
+
+When a vLLM container is started, BenchCli mounts the current working directory
+into the container at `/workspace/benchcli`. Benchmark dataset downloads are
+stored under `./datasets` on the host, so they are visible inside the container
+as `/workspace/benchcli/datasets/...`. The `Run vllm bench serve` flow shows the
+resolved benchmark configuration and command before executing it in the running
+container.
 
 ## Requirements
 

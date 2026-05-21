@@ -13,9 +13,11 @@ from rich.table import Table
 from .config import (
     DEFAULT_CONTAINER_NAME,
     DEFAULT_CONTAINER_MODEL_ROOT,
+    DEFAULT_DATASET_DIR,
     DEFAULT_HF_CACHE,
     DEFAULT_HOST_PORT,
     DEFAULT_IMAGE,
+    DEFAULT_WORKSPACE_MOUNT,
     BenchConfig,
     ServeConfig,
 )
@@ -25,6 +27,7 @@ console = Console()
 MODEL_CONFIG_FILE = "config.json"
 MODEL_WEIGHT_SUFFIXES = (".safetensors", ".bin", ".gguf")
 CUSTOM_SERVE_ARGS = "__custom_serve_args__"
+CUSTOM_BENCH_ARGS = "__custom_bench_args__"
 BACK_TOKEN = ":back"
 BACK_CHOICE = "__back__"
 
@@ -152,6 +155,77 @@ VLLM_MODEL_CONFIG_OPTIONS = [
     {"flag": "--renderer-num-workers", "zh": "renderer 线程池 worker 数。"},
 ]
 
+BENCH_DATASET_NAMES = [
+    "sharegpt",
+    "burstgpt",
+    "sonnet",
+    "random",
+    "random-mm",
+    "random-rerank",
+    "hf",
+    "custom",
+    "custom_mm",
+    "prefix_repetition",
+    "spec_bench",
+]
+
+VLLM_BENCH_SERVE_OPTIONS = [
+    {"flag": "--random-input-len", "zh": "random 数据集每个请求的输入 token 数。", "dataset": "random"},
+    {"flag": "--random-output-len", "zh": "random 数据集每个请求的输出 token 数。", "dataset": "random"},
+    {"flag": "--random-prefix-len", "zh": "random 数据集共享前缀 token 数。", "dataset": "random"},
+    {"flag": "--sharegpt-output-len", "zh": "覆盖 ShareGPT 数据集每个请求的输出长度。", "dataset": "sharegpt"},
+    {"flag": "--sonnet-input-len", "zh": "sonnet 数据集每个请求的输入 token 数。", "dataset": "sonnet"},
+    {"flag": "--sonnet-output-len", "zh": "sonnet 数据集每个请求的输出 token 数。", "dataset": "sonnet"},
+    {"flag": "--sonnet-prefix-len", "zh": "sonnet 数据集每个请求的前缀 token 数。", "dataset": "sonnet"},
+    {"flag": "--hf-subset", "zh": "Hugging Face 数据集 subset。", "dataset": "hf"},
+    {"flag": "--hf-split", "zh": "Hugging Face 数据集 split。", "dataset": "hf"},
+    {"flag": "--hf-name", "zh": "Hugging Face 数据集名称；dataset-path 是本地路径时可指定。", "dataset": "hf"},
+    {"flag": "--hf-output-len", "zh": "覆盖 HF 数据集采样请求的输出长度。", "dataset": "hf"},
+    {"flag": "--custom-output-len", "zh": "custom 数据集请求输出长度；-1 表示不覆盖。", "dataset": "custom"},
+    {"flag": "--prefix-repetition-prefix-len", "zh": "prefix_repetition 的前缀 token 数。", "dataset": "prefix_repetition"},
+    {"flag": "--prefix-repetition-suffix-len", "zh": "prefix_repetition 的后缀 token 数。", "dataset": "prefix_repetition"},
+    {"flag": "--prefix-repetition-num-prefixes", "zh": "prefix_repetition 生成的前缀数量。", "dataset": "prefix_repetition"},
+    {"flag": "--prefix-repetition-output-len", "zh": "prefix_repetition 请求输出 token 数。", "dataset": "prefix_repetition"},
+    {"flag": "--seed", "zh": "随机种子。"},
+    {"flag": "--tokenizer", "zh": "指定 tokenizer 名称或路径。"},
+    {
+        "flag": "--tokenizer-mode",
+        "zh": "tokenizer 模式。",
+        "choices": ["auto", "hf", "slow", "mistral", "deepseek_v32", "qwen_vl"],
+    },
+    {"flag": "--trust-remote-code", "zh": "信任模型仓库自定义代码。", "kind": "bool"},
+    {"flag": "--request-rate", "zh": "每秒请求数；inf 表示一次性发送。"},
+    {"flag": "--burstiness", "zh": "请求到达突发程度；仅 request-rate 非 inf 时生效。"},
+    {"flag": "--max-concurrency", "zh": "最大并发请求数。"},
+    {"flag": "--num-warmups", "zh": "正式测试前的 warmup 请求数量。"},
+    {"flag": "--percentile-metrics", "zh": "要统计分位数的指标，如 ttft,tpot,itl,e2el。"},
+    {"flag": "--metric-percentiles", "zh": "要统计的分位数，如 90,95,99。"},
+    {"flag": "--goodput", "zh": "goodput SLO，格式如 ttft:100 tpot:20。"},
+    {"flag": "--save-detailed", "zh": "保存每个请求的详细信息。", "kind": "bool"},
+    {"flag": "--result-filename", "zh": "保存结果 JSON 的文件名。"},
+    {"flag": "--metadata", "zh": "写入结果文件的元数据，通常是 JSON。"},
+    {"flag": "--disable-tqdm", "zh": "禁用 tqdm 进度条。", "kind": "bool"},
+    {"flag": "--profile", "zh": "启用 vLLM profiling；服务端需要 profiler 配置。", "kind": "bool"},
+    {"flag": "--skip-tokenizer-init", "zh": "跳过 tokenizer 初始化。", "kind": "bool"},
+    {"flag": "--insecure", "zh": "连接自签名 HTTPS 服务时禁用证书校验。", "kind": "bool"},
+    {"flag": "--plot-timeline", "zh": "生成请求时间线 HTML 图。", "kind": "bool"},
+    {"flag": "--plot-dataset-stats", "zh": "生成数据集 token 分布统计图。", "kind": "bool"},
+    {"flag": "--extra-body", "zh": "每个请求附加的 JSON body。"},
+]
+
+DOWNLOADABLE_DATASETS = {
+    "ShareGPT": {
+        "url": "https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json",
+        "filename": "ShareGPT_V3_unfiltered_cleaned_split.json",
+        "description": "常用对话压测数据集，适合 --dataset-name sharegpt。",
+    },
+    "BurstGPT": {
+        "url": "https://github.com/HPMLL/BurstGPT/releases/download/v1.1/BurstGPT_without_fails_2.csv",
+        "filename": "BurstGPT_without_fails_2.csv",
+        "description": "BurstGPT trace 数据集，适合 --dataset-name burstgpt。",
+    },
+}
+
 
 # -- banners --------------------------------------------------------------
 
@@ -192,6 +266,7 @@ def show_status(info: Optional[ContainerInfo]) -> None:
 
 MENU_SERVE = "Start vLLM inference server"
 MENU_BENCH = "Run `vllm bench serve`"
+MENU_DOWNLOAD_DATASET = "Download benchmark dataset"
 MENU_MODEL_ROOT = "Set local model directory and select model"
 MENU_STATUS = "Show container status"
 MENU_LOGS = "Tail container logs"
@@ -213,6 +288,7 @@ def main_menu(
         choices=[
             MENU_SERVE,
             MENU_BENCH,
+            MENU_DOWNLOAD_DATASET,
             MENU_MODEL_ROOT,
             MENU_STATUS,
             MENU_LOGS,
@@ -338,6 +414,70 @@ def _prompt_vllm_serve_extra_args(is_local_model: bool) -> list[str]:
         if value:
             args.extend([flag, value])
     return args
+
+
+def _prompt_option_args(
+    title: str,
+    options: list[dict],
+    custom_value: str,
+    custom_title: str,
+) -> list[str]:
+    choices = [
+        questionary.Choice(title="← Back", value=BACK_CHOICE),
+        questionary.Separator(),
+    ]
+    choices.extend(
+        questionary.Choice(
+            title=f"{option['flag']} - {option['zh']}",
+            value=option["flag"],
+        )
+        for option in options
+    )
+    choices.append(questionary.Choice(title=custom_title, value=custom_value))
+    selected_flags = questionary.checkbox(title, choices=choices).ask() or []
+    if BACK_CHOICE in selected_flags:
+        raise BackRequested
+
+    option_by_flag = {option["flag"]: option for option in options}
+    args: list[str] = []
+    for flag in selected_flags:
+        if flag == custom_value:
+            raw = _ask_text("Custom extra args", default="")
+            if raw:
+                args.extend(shlex.split(raw))
+            continue
+
+        option = option_by_flag[flag]
+        if option.get("kind") == "bool":
+            args.append(flag)
+            continue
+        if option.get("choices"):
+            value = questionary.select(
+                f"{flag} - {option['zh']}",
+                choices=option["choices"],
+                default=option["choices"][0],
+            ).ask()
+            if value is None:
+                raise BackRequested
+        else:
+            value = _ask_text(f"{flag} - {option['zh']}", default="")
+        if value:
+            args.extend([flag, value])
+    return args
+
+
+def _prompt_vllm_bench_extra_args(dataset_name: str) -> list[str]:
+    options = [
+        option
+        for option in VLLM_BENCH_SERVE_OPTIONS
+        if option.get("dataset") in {None, dataset_name}
+    ]
+    return _prompt_option_args(
+        "Extra `vllm bench serve` args (space to select, enter to continue)",
+        options,
+        CUSTOM_BENCH_ARGS,
+        "自定义原始参数 - 手动输入其它 vllm bench serve 参数",
+    )
 
 
 def _looks_like_model_dir(path: Path) -> bool:
@@ -552,41 +692,187 @@ def prompt_serve_config(
     )
 
 
+def _host_dataset_dir() -> Path:
+    return Path.cwd() / DEFAULT_DATASET_DIR
+
+
+def _container_dataset_path(host_path: str) -> str:
+    path = Path(host_path).expanduser().resolve()
+    cwd = Path.cwd().resolve()
+    try:
+        relative = path.relative_to(cwd)
+    except ValueError:
+        return str(path)
+    return (Path(DEFAULT_WORKSPACE_MOUNT) / relative).as_posix()
+
+
+def _discover_dataset_files() -> list[Path]:
+    dataset_dir = _host_dataset_dir()
+    if not dataset_dir.is_dir():
+        return []
+    return sorted(
+        [
+            path
+            for path in dataset_dir.rglob("*")
+            if path.is_file() and path.suffix.lower() in {".json", ".jsonl", ".csv", ".txt"}
+        ],
+        key=lambda p: str(p.relative_to(dataset_dir)).lower(),
+    )
+
+
+def prompt_dataset_download() -> tuple[str, Path]:
+    choices = [
+        questionary.Choice(
+            title=f"{name} - {data['description']}",
+            value=name,
+        )
+        for name, data in DOWNLOADABLE_DATASETS.items()
+    ]
+    choices.append(questionary.Choice(title="Custom URL", value="__custom__"))
+    selected = questionary.select("Dataset to download", choices=choices).ask()
+    if selected is None:
+        raise KeyboardInterrupt
+    if selected == "__custom__":
+        url = _ask_text("Dataset URL", default="")
+        filename = _ask_text("Output filename", default=Path(url).name or "dataset")
+    else:
+        data = DOWNLOADABLE_DATASETS[selected]
+        url = data["url"]
+        filename = data["filename"]
+
+    output_dir = _host_dataset_dir()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return url, output_dir / filename
+
+
+def _prompt_dataset_path(default: Optional[str] = None) -> Optional[str]:
+    choices = [
+        questionary.Choice(title="No dataset path", value=""),
+        questionary.Choice(title="Enter path manually", value="__manual__"),
+    ]
+    dataset_files = _discover_dataset_files()
+    if dataset_files:
+        choices.append(questionary.Separator())
+        choices.extend(
+            questionary.Choice(
+                title=str(path.relative_to(Path.cwd())),
+                value=_container_dataset_path(str(path)),
+            )
+            for path in dataset_files
+        )
+    selected = questionary.select(
+        "Dataset path",
+        choices=choices,
+        default=default or "",
+    ).ask()
+    if selected is None:
+        raise BackRequested
+    if selected == "__manual__":
+        raw = _ask_text("Dataset path inside container", default=default or "")
+        return raw or None
+    return selected or None
+
+
+def show_bench_config(cfg: BenchConfig) -> None:
+    table = Table(title="vLLM bench serve config", show_header=False, border_style="cyan")
+    table.add_row("model", cfg.model)
+    table.add_row("backend", cfg.backend)
+    table.add_row("base_url", cfg.base_url or f"{cfg.host}:{cfg.port}")
+    table.add_row("endpoint", cfg.endpoint)
+    table.add_row("dataset_name", cfg.dataset_name)
+    if cfg.dataset_path:
+        table.add_row("dataset_path", cfg.dataset_path)
+    table.add_row("num_prompts", str(cfg.num_prompts))
+    table.add_row("request_rate", "inf" if cfg.request_rate == float("inf") else str(cfg.request_rate))
+    if cfg.max_concurrency is not None:
+        table.add_row("max_concurrency", str(cfg.max_concurrency))
+    if cfg.save_result:
+        table.add_row("save_result", "true")
+        if cfg.result_dir:
+            table.add_row("result_dir", cfg.result_dir)
+    if cfg.extra_args:
+        table.add_row("extra_args", " ".join(shlex.quote(arg) for arg in cfg.extra_args))
+    table.add_row("command", " ".join(shlex.quote(arg) for arg in cfg.vllm_bench_command()))
+    console.print(table)
+
+
 def prompt_bench_config(default_model: str) -> BenchConfig:
-    model = _ask_text("Model served by vLLM", default=default_model)
-    base_url = _ask_text("Base URL (inside container)", default="http://localhost:8000")
-    dataset_name = questionary.select(
-        "Dataset",
-        choices=["random", "sharegpt", "sonnet", "hf"],
-        default="random",
-    ).ask() or "random"
-    num_prompts = _ask_int("Number of prompts", default=200)
-    request_rate = _ask_float("Request rate (req/s, 'inf' for max)", default=float("inf"))
-    max_concurrency = _ask_optional_int("Max concurrency", default=None)
-    random_input_len = 1024
-    random_output_len = 128
-    if dataset_name == "random":
-        random_input_len = _ask_int("Random input length", default=1024)
-        random_output_len = _ask_int("Random output length", default=128)
-    save_result = questionary.confirm("Save result JSON?", default=False).ask() or False
-    result_dir = None
-    if save_result:
-        result_dir = _ask_text("Result dir (inside container)", default="/tmp/vllm-bench")
-    extra = _ask_text("Extra `vllm bench serve` args", default="")
-    extra_args = extra.split() if extra else []
-    return BenchConfig(
+    step = 0
+    model = default_model
+    backend = "openai"
+    base_url: Optional[str] = "http://localhost:8000"
+    endpoint = "/v1/completions"
+    dataset_name = "random"
+    dataset_path: Optional[str] = None
+    num_prompts = 200
+    request_rate = float("inf")
+    max_concurrency: Optional[int] = None
+    save_result = False
+    result_dir: Optional[str] = None
+    extra_args: list[str] = []
+
+    while step < 10:
+        try:
+            if step == 0:
+                model = _ask_text("Model served by vLLM", default=model)
+            elif step == 1:
+                backend = questionary.select(
+                    "Backend",
+                    choices=["openai", "openai-chat", "vllm", "tgi", "deepspeed-mii"],
+                    default=backend,
+                ).ask() or backend
+            elif step == 2:
+                base_url = _ask_text("Base URL inside container", default=base_url or "")
+            elif step == 3:
+                endpoint = _ask_text("Endpoint", default=endpoint)
+            elif step == 4:
+                selected = questionary.select(
+                    "Dataset name",
+                    choices=[questionary.Choice(title="← Back", value=BACK_CHOICE), questionary.Separator(), *BENCH_DATASET_NAMES],
+                    default=dataset_name,
+                ).ask()
+                if selected == BACK_CHOICE:
+                    raise BackRequested
+                dataset_name = selected or dataset_name
+            elif step == 5:
+                dataset_path = _prompt_dataset_path(default=dataset_path)
+            elif step == 6:
+                num_prompts = _ask_int("Number of prompts", default=num_prompts)
+            elif step == 7:
+                request_rate = _ask_float("Request rate (req/s, 'inf' for max)", default=request_rate)
+                max_concurrency = _ask_optional_int("Max concurrency", default=max_concurrency)
+            elif step == 8:
+                save_result = questionary.confirm("Save result JSON?", default=save_result).ask() or False
+                if save_result:
+                    result_dir = _ask_text("Result dir inside container", default=result_dir or f"{DEFAULT_WORKSPACE_MOUNT}/results")
+                else:
+                    result_dir = None
+            elif step == 9:
+                extra_args = _prompt_vllm_bench_extra_args(dataset_name)
+            step += 1
+        except BackRequested:
+            if step == 0:
+                raise KeyboardInterrupt from None
+            step = max(0, step - 1)
+
+    cfg = BenchConfig(
         model=model,
-        base_url=base_url,
+        backend=backend,
+        base_url=base_url or None,
+        endpoint=endpoint,
         dataset_name=dataset_name,
+        dataset_path=dataset_path,
         num_prompts=num_prompts,
         request_rate=request_rate,
         max_concurrency=max_concurrency,
-        random_input_len=random_input_len,
-        random_output_len=random_output_len,
         save_result=save_result,
         result_dir=result_dir,
         extra_args=extra_args,
     )
+    show_bench_config(cfg)
+    if not confirm("Run this benchmark?", default=True):
+        raise KeyboardInterrupt
+    return cfg
 
 
 def confirm(message: str, default: bool = False) -> bool:

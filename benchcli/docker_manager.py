@@ -110,6 +110,9 @@ class DockerManager:
             volumes[cfg.hf_cache_dir] = {"bind": "/root/.cache/huggingface", "mode": "rw"}
         if cfg.model_mount_dir:
             volumes[cfg.model_mount_dir] = {"bind": cfg.container_model_root, "mode": "ro"}
+        if cfg.workspace_dir:
+            os.makedirs(cfg.workspace_dir, exist_ok=True)
+            volumes[cfg.workspace_dir] = {"bind": cfg.container_workspace_dir, "mode": "rw"}
 
         try:
             container = self.client.containers.run(
@@ -151,7 +154,12 @@ class DockerManager:
             raise DockerError(f"Container {name!r} not found.")
         return c.logs(stream=True, follow=True, tail=tail)
 
-    def exec_interactive(self, name: str, command: list[str]) -> int:
+    def exec_interactive(
+        self,
+        name: str,
+        command: list[str],
+        workdir: Optional[str] = None,
+    ) -> int:
         """Run `docker exec -it <name> <command>` so the user sees live output.
 
         Using the docker CLI here keeps TTY behavior simple for benchmark output.
@@ -159,7 +167,10 @@ class DockerManager:
         c = self.find(name)
         if c is None:
             raise DockerError(f"Container {name!r} not found.")
-        argv = ["docker", "exec", "-it", name, *command]
+        argv = ["docker", "exec", "-it"]
+        if workdir:
+            argv += ["-w", workdir]
+        argv += [name, *command]
         printable = " ".join(shlex.quote(p) for p in argv)
         print(f"$ {printable}")
         return subprocess.call(argv)
